@@ -152,4 +152,37 @@ OperationResult RegistrationService::drop(
             "Active enrollment not found"};
 }
 
+// ============================================================================
+// [Zhu Ziliang 追加，待 Zhang Yuhua 复核] 教师/管理员模块需要的只读接口与
+// 受控写入。这里只读取或替换目录与规则，不触碰 enrollments_，因此 enroll()
+// 的检查顺序、名额计算方式和已有选课记录都保持原样。
+// ============================================================================
+
+std::vector<Enrollment> RegistrationService::all_enrollments() const {
+    return enrollments_;
+}
+
+std::vector<Course> RegistrationService::course_snapshot() const {
+    return courses_;
+}
+
+std::vector<TeachingClass> RegistrationService::teaching_class_snapshot() const {
+    return teaching_classes_;
+}
+
+RegistrationRule RegistrationService::registration_rule() const {
+    return rule_;
+}
+
+void RegistrationService::apply_catalog_change(
+    const std::vector<Course>& courses,
+    const std::vector<TeachingClass>& teaching_classes) {
+    courses_ = courses;
+    teaching_classes_ = teaching_classes;
+}
+
+void RegistrationService::apply_rule_change(const RegistrationRule& rule) {
+    rule_ = rule;
+}
+
 }  // namespace course_registration

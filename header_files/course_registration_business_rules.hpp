@@ -38,9 +38,16 @@ struct Enrollment {
 };
 
 // 目前用示例数据设置规则；之后再由管理员功能提供真实配置。
+// [Zhu Ziliang 追加，待 Zhang Yuhua 复核] 增加选课开始/结束时间（UC15 需要）。
+// 两个字段追加在末尾并带默认值，原来的 {true, 7} 形式初始化依然有效，
+// 也不会在 -Wall -Wextra 下产生 missing-field-initializers 警告。
+// 格式为 "YYYY-MM-DDTHH:MM"；空字符串表示该时间尚未设置，此时 registration_open
+// 仍由管理员手动开关决定，不引入新的必填字段。
 struct RegistrationRule {
     bool registration_open;
     int maximum_credits;
+    std::string opens_at{};
+    std::string closes_at{};
 };
 
 enum class ResultCode {
@@ -51,7 +58,15 @@ enum class ResultCode {
     CreditLimitExceeded,
     TeachingClassFull,
     TeachingClassNotFound,
-    ActiveEnrollmentNotFound
+    ActiveEnrollmentNotFound,
+    // [Zhu Ziliang 追加，待 Zhang Yuhua 复核] 教师/管理员模块需要的失败原因。
+    // 追加在末尾，上面已有编号的含义不变，现有调用方无需改动。
+    PermissionDenied,       // 角色或归属不符，例如教师读取他人的教学班
+    InvalidInput,           // 字段格式/取值为空、负数、非法时段等
+    RecordNotFound,         // 课程、教师、学生等记录不存在
+    DuplicateIdentifier,    // 编号或学号/工号重复
+    CapacityBelowEnrollment,// 新容量小于当前有效选课人数
+    CatalogInUse            // 记录仍被引用（课程仍有教学班、教学班仍有有效选课）
 };
 
 struct OperationResult {
@@ -71,6 +86,21 @@ public:
     int remaining_seats(int teaching_class_id) const;
     int enrollment_count(int teaching_class_id) const;
     std::vector<Enrollment> active_enrollments(int student_id) const;
+
+    // ---- [Zhu Ziliang 追加，待 Zhang Yuhua 复核] 教师/管理员模块只读接口 ----
+    // 目的：名单、人数、余量和管理员一致性检查都从同一份选课记录取值，
+    // 不另存计数，避免教师端与选课端显示不同人数。
+    std::vector<Enrollment> all_enrollments() const;
+    std::vector<Course> course_snapshot() const;
+    std::vector<TeachingClass> teaching_class_snapshot() const;
+    RegistrationRule registration_rule() const;
+
+    // ---- [Zhu Ziliang 追加，待 Zhang Yuhua 复核] 管理员校验通过后的受控写入 ----
+    // 只替换课程目录/教学班/规则，不改动 enrollments_；enroll() 的检查顺序不变。
+    // 调用方必须先经 AdministratorService 校验，不得直接调用。
+    void apply_catalog_change(const std::vector<Course>& courses,
+                              const std::vector<TeachingClass>& teaching_classes);
+    void apply_rule_change(const RegistrationRule& rule);
 
 private:
     const Course* find_course(int course_id) const;
