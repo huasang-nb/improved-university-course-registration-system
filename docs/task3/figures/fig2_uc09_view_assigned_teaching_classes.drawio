@@ -1,0 +1,189 @@
+<mxfile host="app.diagrams.net" type="device">
+  <diagram id="Fig2 UC09 View Assigned Teaching Classes" name="Fig2 UC09 View Assigned Teaching Classes">
+    <mxGraphModel dx="1600" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="773" pageHeight="960" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="c0" value="Figure 2  UC09 View Assigned Teaching Classes" style="text;html=0;whiteSpace=wrap;fontSize=15;fontStyle=1;fontColor=#1F2933;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="196.008" y="28.75" width="380.984" height="22.5" as="geometry"/>
+        </mxCell>
+        <mxCell id="c1" value="Teacher reads only the teaching classes assigned to him/her; the identity comes from the login module" style="text;html=0;whiteSpace=wrap;fontSize=9.5;fontStyle=0;fontColor=#52606D;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="122" y="52.875" width="529" height="14.25" as="geometry"/>
+        </mxCell>
+        <mxCell id="c2" value="Teacher" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=0;fillColor=none;strokeColor=#1F2933;strokeWidth=1.3;fontSize=10;fontStyle=0;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="84" y="76" width="28" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="c3" value="" style="endArrow=none;html=0;dashed=1;strokeColor=#9AA5B1;strokeWidth=1;labelBackgroundColor=#FFFFFF;fontSize=9;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="98" y="138" as="sourcePoint"/>
+            <mxPoint x="98" y="936" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c4" value="" style="rounded=0;whiteSpace=wrap;html=0;fillColor=white;strokeColor=#9AA5B1;strokeWidth=0.9;fontSize=10;fontColor=#1F2933;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="94" y="932" width="8" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c5" value="TeacherPage" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#EAF2FB;strokeColor=#4A7EBB;strokeWidth=1.3;fontSize=10.5;fontColor=#1F2933;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="180" y="65" width="97" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="c6" value="" style="endArrow=none;html=0;dashed=1;strokeColor=#9AA5B1;strokeWidth=1;labelBackgroundColor=#FFFFFF;fontSize=9;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="228.5" y="99" as="sourcePoint"/>
+            <mxPoint x="228.5" y="936" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c7" value="" style="rounded=0;whiteSpace=wrap;html=0;fillColor=white;strokeColor=#9AA5B1;strokeWidth=0.9;fontSize=10;fontColor=#1F2933;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="224.5" y="932" width="8" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c8" value="TeacherService" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#EAF2FB;strokeColor=#4A7EBB;strokeWidth=1.3;fontSize=10.5;fontColor=#1F2933;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="311" y="65" width="108" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="c9" value="" style="endArrow=none;html=0;dashed=1;strokeColor=#9AA5B1;strokeWidth=1;labelBackgroundColor=#FFFFFF;fontSize=9;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="365" y="99" as="sourcePoint"/>
+            <mxPoint x="365" y="936" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c10" value="" style="rounded=0;whiteSpace=wrap;html=0;fillColor=white;strokeColor=#9AA5B1;strokeWidth=0.9;fontSize=10;fontColor=#1F2933;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="361" y="932" width="8" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c11" value="SystemContext" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#EAF2FB;strokeColor=#4A7EBB;strokeWidth=1.3;fontSize=10.5;fontColor=#1F2933;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="453" y="65" width="107" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="c12" value="" style="endArrow=none;html=0;dashed=1;strokeColor=#9AA5B1;strokeWidth=1;labelBackgroundColor=#FFFFFF;fontSize=9;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="506.5" y="99" as="sourcePoint"/>
+            <mxPoint x="506.5" y="936" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c13" value="" style="rounded=0;whiteSpace=wrap;html=0;fillColor=white;strokeColor=#9AA5B1;strokeWidth=0.9;fontSize=10;fontColor=#1F2933;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="502.5" y="932" width="8" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c14" value="RegistrationService" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#EAF2FB;strokeColor=#4A7EBB;strokeWidth=1.3;fontSize=10.5;fontColor=#1F2933;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="594" y="65" width="129" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="c15" value="" style="endArrow=none;html=0;dashed=1;strokeColor=#9AA5B1;strokeWidth=1;labelBackgroundColor=#FFFFFF;fontSize=9;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="658.5" y="99" as="sourcePoint"/>
+            <mxPoint x="658.5" y="936" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c16" value="" style="rounded=0;whiteSpace=wrap;html=0;fillColor=white;strokeColor=#9AA5B1;strokeWidth=0.9;fontSize=10;fontColor=#1F2933;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="654.5" y="932" width="8" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c17" value="openMyTeachingClasses()" style="endArrow=block;endFill=1;html=0;dashed=0;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="98" y="172" as="sourcePoint"/>
+            <mxPoint x="228.5" y="172" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c18" value="assignedTeachingClasses(identity)" style="endArrow=block;endFill=1;html=0;dashed=0;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="228.5" y="218" as="sourcePoint"/>
+            <mxPoint x="365" y="218" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c19" value="" style="endArrow=block;endFill=1;html=0;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="370" y="256" as="sourcePoint"/>
+            <mxPoint x="370" y="276" as="targetPoint"/>
+            <Array as="points">
+            <mxPoint x="417" y="256"/>
+            <mxPoint x="417" y="276"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c20" value="checkRole(identity)" style="text;html=0;whiteSpace=wrap;fontSize=9;fontStyle=0;fontColor=#1F2933;align=left;verticalAlign=middle;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="425" y="259.25" width="113" height="13.5" as="geometry"/>
+        </mxCell>
+        <mxCell id="c21" value="listTeachingClasses()" style="endArrow=block;endFill=1;html=0;dashed=0;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="365" y="370" as="sourcePoint"/>
+            <mxPoint x="506.5" y="370" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c22" value="teachingClassSnapshot()" style="endArrow=block;endFill=1;html=0;dashed=0;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="506.5" y="416" as="sourcePoint"/>
+            <mxPoint x="658.5" y="416" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c23" value="classes" style="endArrow=open;endFill=0;html=0;dashed=1;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="658.5" y="462" as="sourcePoint"/>
+            <mxPoint x="506.5" y="462" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c24" value="classes" style="endArrow=open;endFill=0;html=0;dashed=1;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="506.5" y="508" as="sourcePoint"/>
+            <mxPoint x="365" y="508" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c25" value="enrollmentCount(classId)" style="endArrow=block;endFill=1;html=0;dashed=0;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="365" y="554" as="sourcePoint"/>
+            <mxPoint x="506.5" y="554" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c26" value="activeCount" style="endArrow=open;endFill=0;html=0;dashed=1;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="506.5" y="600" as="sourcePoint"/>
+            <mxPoint x="365" y="600" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c27" value="" style="endArrow=block;endFill=1;html=0;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="370" y="638" as="sourcePoint"/>
+            <mxPoint x="370" y="658" as="targetPoint"/>
+            <Array as="points">
+            <mxPoint x="417" y="638"/>
+            <mxPoint x="417" y="658"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c28" value="buildSummary(class)" style="text;html=0;whiteSpace=wrap;fontSize=9;fontStyle=0;fontColor=#1F2933;align=left;verticalAlign=middle;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="425" y="641.25" width="118" height="13.5" as="geometry"/>
+        </mxCell>
+        <mxCell id="c29" value="summaries of own classes" style="endArrow=open;endFill=0;html=0;dashed=1;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="365" y="704" as="sourcePoint"/>
+            <mxPoint x="228.5" y="704" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c30" value="render class list + counts" style="endArrow=open;endFill=0;html=0;dashed=0;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="228.5" y="750" as="sourcePoint"/>
+            <mxPoint x="98" y="750" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c31" value="classRoster(identity, otherClassId)" style="endArrow=block;endFill=1;html=0;dashed=0;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="228.5" y="796" as="sourcePoint"/>
+            <mxPoint x="365" y="796" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c32" value="PermissionDenied" style="endArrow=open;endFill=0;html=0;dashed=1;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="365" y="842" as="sourcePoint"/>
+            <mxPoint x="228.5" y="842" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c33" value='show "permission denied"' style="endArrow=open;endFill=0;html=0;dashed=0;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="228.5" y="888" as="sourcePoint"/>
+            <mxPoint x="98" y="888" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c34" value="loop&#10;[for each teaching class of this teacher]" style="shape=umlFrame;whiteSpace=wrap;html=0;width=110;height=26;fillColor=none;strokeColor=#1F2933;fontSize=9;fontStyle=1;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="339" y="516" width="193.5" height="152" as="geometry"/>
+        </mxCell>
+        <mxCell id="c35" value="alt&#10;[class belongs to another teacher]" style="shape=umlFrame;whiteSpace=wrap;html=0;width=110;height=26;fillColor=none;strokeColor=#1F2933;fontSize=9;fontStyle=1;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="72" y="758" width="319" height="152" as="geometry"/>
+        </mxCell>
+        <mxCell id="c36" value="role is checked before any class data is read" style="shape=note;whiteSpace=wrap;html=0;size=12;fillColor=#FFFDE7;strokeColor=#C9A227;align=left;verticalAlign=middle;fontSize=9;fontFamily=Microsoft YaHei;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="379" y="282" width="210" height="32" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -1,0 +1,185 @@
+<mxfile host="app.diagrams.net" type="device">
+  <diagram id="Fig4 UC14 Set Teaching Class Capacity" name="Fig4 UC14 Set Teaching Class Capacity">
+    <mxGraphModel dx="1600" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="805" pageHeight="954" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="c0" value="Figure 4  UC14 Set Teaching Class Capacity" style="text;html=0;whiteSpace=wrap;fontSize=15;fontStyle=1;fontColor=#1F2933;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="228.008" y="28.75" width="348.984" height="22.5" as="geometry"/>
+        </mxCell>
+        <mxCell id="c1" value="The new capacity may not be lower than the number of active enrollments" style="text;html=0;whiteSpace=wrap;fontSize=9.5;fontStyle=0;fontColor=#52606D;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="207.5" y="52.875" width="390" height="14.25" as="geometry"/>
+        </mxCell>
+        <mxCell id="c2" value="Administrator" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=0;fillColor=none;strokeColor=#1F2933;strokeWidth=1.3;fontSize=10;fontStyle=0;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="86.5" y="76" width="28" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="c3" value="" style="endArrow=none;html=0;dashed=1;strokeColor=#9AA5B1;strokeWidth=1;labelBackgroundColor=#FFFFFF;fontSize=9;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="100.5" y="138" as="sourcePoint"/>
+            <mxPoint x="100.5" y="930" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c4" value="" style="rounded=0;whiteSpace=wrap;html=0;fillColor=white;strokeColor=#9AA5B1;strokeWidth=0.9;fontSize=10;fontColor=#1F2933;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="96.5" y="926" width="8" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c5" value="AdminPage" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#EAF2FB;strokeColor=#4A7EBB;strokeWidth=1.3;fontSize=10.5;fontColor=#1F2933;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="185" y="65" width="96" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="c6" value="" style="endArrow=none;html=0;dashed=1;strokeColor=#9AA5B1;strokeWidth=1;labelBackgroundColor=#FFFFFF;fontSize=9;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="233" y="99" as="sourcePoint"/>
+            <mxPoint x="233" y="930" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c7" value="" style="rounded=0;whiteSpace=wrap;html=0;fillColor=white;strokeColor=#9AA5B1;strokeWidth=0.9;fontSize=10;fontColor=#1F2933;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="229" y="926" width="8" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c8" value="AdministratorService" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#EAF2FB;strokeColor=#4A7EBB;strokeWidth=1.3;fontSize=10.5;fontColor=#1F2933;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="315" y="65" width="136" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="c9" value="" style="endArrow=none;html=0;dashed=1;strokeColor=#9AA5B1;strokeWidth=1;labelBackgroundColor=#FFFFFF;fontSize=9;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="383" y="99" as="sourcePoint"/>
+            <mxPoint x="383" y="930" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c10" value="" style="rounded=0;whiteSpace=wrap;html=0;fillColor=white;strokeColor=#9AA5B1;strokeWidth=0.9;fontSize=10;fontColor=#1F2933;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="379" y="926" width="8" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c11" value="SystemContext" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#EAF2FB;strokeColor=#4A7EBB;strokeWidth=1.3;fontSize=10.5;fontColor=#1F2933;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="485" y="65" width="107" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="c12" value="" style="endArrow=none;html=0;dashed=1;strokeColor=#9AA5B1;strokeWidth=1;labelBackgroundColor=#FFFFFF;fontSize=9;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="538.5" y="99" as="sourcePoint"/>
+            <mxPoint x="538.5" y="930" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c13" value="" style="rounded=0;whiteSpace=wrap;html=0;fillColor=white;strokeColor=#9AA5B1;strokeWidth=0.9;fontSize=10;fontColor=#1F2933;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="534.5" y="926" width="8" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c14" value="RegistrationService" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#EAF2FB;strokeColor=#4A7EBB;strokeWidth=1.3;fontSize=10.5;fontColor=#1F2933;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="626" y="65" width="129" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="c15" value="" style="endArrow=none;html=0;dashed=1;strokeColor=#9AA5B1;strokeWidth=1;labelBackgroundColor=#FFFFFF;fontSize=9;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="690.5" y="99" as="sourcePoint"/>
+            <mxPoint x="690.5" y="930" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c16" value="" style="rounded=0;whiteSpace=wrap;html=0;fillColor=white;strokeColor=#9AA5B1;strokeWidth=0.9;fontSize=10;fontColor=#1F2933;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="686.5" y="926" width="8" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c17" value="set capacity of TC-10 to 1" style="endArrow=block;endFill=1;html=0;dashed=0;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="100.5" y="172" as="sourcePoint"/>
+            <mxPoint x="233" y="172" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c18" value="setTeachingClassCapacity(identity, 10, 1)" style="endArrow=block;endFill=1;html=0;dashed=0;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="233" y="218" as="sourcePoint"/>
+            <mxPoint x="383" y="218" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c19" value="" style="endArrow=block;endFill=1;html=0;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="388" y="256" as="sourcePoint"/>
+            <mxPoint x="388" y="276" as="targetPoint"/>
+            <Array as="points">
+            <mxPoint x="435" y="256"/>
+            <mxPoint x="435" y="276"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c20" value="canManageCatalog(identity)" style="text;html=0;whiteSpace=wrap;fontSize=9;fontStyle=0;fontColor=#1F2933;align=left;verticalAlign=middle;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="443" y="259.25" width="153" height="13.5" as="geometry"/>
+        </mxCell>
+        <mxCell id="c21" value="findTeachingClass(10)" style="endArrow=block;endFill=1;html=0;dashed=0;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="383" y="322" as="sourcePoint"/>
+            <mxPoint x="538.5" y="322" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c22" value="class, capacity = 2" style="endArrow=open;endFill=0;html=0;dashed=1;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="538.5" y="368" as="sourcePoint"/>
+            <mxPoint x="383" y="368" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c23" value="enrollmentCount(10)" style="endArrow=block;endFill=1;html=0;dashed=0;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="383" y="468" as="sourcePoint"/>
+            <mxPoint x="538.5" y="468" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c24" value="countActive(10)" style="endArrow=block;endFill=1;html=0;dashed=0;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="538.5" y="514" as="sourcePoint"/>
+            <mxPoint x="690.5" y="514" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c25" value="2" style="endArrow=open;endFill=0;html=0;dashed=1;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="690.5" y="560" as="sourcePoint"/>
+            <mxPoint x="538.5" y="560" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c26" value="2" style="endArrow=open;endFill=0;html=0;dashed=1;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="538.5" y="606" as="sourcePoint"/>
+            <mxPoint x="383" y="606" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c27" value="CapacityBelowEnrollment(newCapacity, activeCount)" style="endArrow=open;endFill=0;html=0;dashed=1;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="383" y="652" as="sourcePoint"/>
+            <mxPoint x="233" y="652" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c28" value="show reason, capacity unchanged" style="endArrow=open;endFill=0;html=0;dashed=0;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="233" y="698" as="sourcePoint"/>
+            <mxPoint x="100.5" y="698" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c29" value="applyTeachingClassChange(class, capacity = 1)" style="endArrow=block;endFill=1;html=0;dashed=0;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="383" y="744" as="sourcePoint"/>
+            <mxPoint x="538.5" y="744" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c30" value="applyCatalogChange(courses, classes)" style="endArrow=block;endFill=1;html=0;dashed=0;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="538.5" y="790" as="sourcePoint"/>
+            <mxPoint x="690.5" y="790" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c31" value="Success(remainingSeats = 1)" style="endArrow=open;endFill=0;html=0;dashed=1;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="383" y="836" as="sourcePoint"/>
+            <mxPoint x="233" y="836" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c32" value="show capacity 1 and remaining seats 1" style="endArrow=open;endFill=0;html=0;dashed=0;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="233" y="882" as="sourcePoint"/>
+            <mxPoint x="100.5" y="882" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c33" value="alt&#10;[newCapacity &lt; activeCount]" style="shape=umlFrame;whiteSpace=wrap;html=0;width=110;height=26;fillColor=none;strokeColor=#1F2933;fontSize=9;fontStyle=1;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="74.5" y="614" width="642" height="290" as="geometry"/>
+        </mxCell>
+        <mxCell id="c34" value="[newCapacity &gt;= activeCount]" style="endArrow=none;html=0;dashed=1;strokeColor=#1F2933;labelBackgroundColor=#FFFFFF;fontSize=9;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="74.5" y="722" as="sourcePoint"/>
+            <mxPoint x="716.5" y="722" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c35" value="remaining_seats is never stored; it is recomputed as capacity - active enrollments" style="shape=note;whiteSpace=wrap;html=0;size=12;fillColor=#FFFDE7;strokeColor=#C9A227;align=left;verticalAlign=middle;fontSize=9;fontFamily=Microsoft YaHei;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="247" y="386" width="210" height="38" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
