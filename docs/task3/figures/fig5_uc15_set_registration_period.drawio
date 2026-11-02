@@ -1,14 +1,14 @@
 <mxfile host="app.diagrams.net" type="device">
   <diagram id="Fig5 UC15 Set Registration Period" name="Fig5 UC15 Set Registration Period">
-    <mxGraphModel dx="1600" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="853" math="0" shadow="0">
+    <mxGraphModel dx="1600" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="807" pageHeight="853" math="0" shadow="0">
       <root>
         <mxCell id="0"/>
         <mxCell id="1" parent="0"/>
         <mxCell id="c0" value="Figure 5  UC15 Set Registration Period" style="text;html=0;whiteSpace=wrap;fontSize=15;fontStyle=1;fontColor=#1F2933;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
-          <mxGeometry x="268.25" y="28.75" width="314" height="22.5" as="geometry"/>
+          <mxGeometry x="246.75" y="28.75" width="314" height="22.5" as="geometry"/>
         </mxCell>
-        <mxCell id="c1" value="The administrator sets the opening and closing time; an invalid period is rejected" style="text;html=0;whiteSpace=wrap;fontSize=9.5;fontStyle=0;fontColor=#52606D;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
-          <mxGeometry x="213.25" y="52.875" width="424" height="14.25" as="geometry"/>
+        <mxCell id="c1" value="The administrator sets the opening and closing time; the open state is derived at request time, not cached" style="text;html=0;whiteSpace=wrap;fontSize=9.5;fontStyle=0;fontColor=#52606D;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="130.75" y="52.875" width="546" height="14.25" as="geometry"/>
         </mxCell>
         <mxCell id="c2" value="Administrator" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=0;fillColor=none;strokeColor=#1F2933;strokeWidth=1.3;fontSize=10;fontStyle=0;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
           <mxGeometry x="86.5" y="76" width="28" height="44" as="geometry"/>
@@ -120,7 +120,7 @@
             <mxPoint x="100.5" y="426" as="targetPoint"/>
           </mxGeometry>
         </mxCell>
-        <mxCell id="c25" value="applyRuleChange(rule)" style="endArrow=block;endFill=1;html=0;dashed=0;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+        <mxCell id="c25" value="applyRuleChange(opens_at, closes_at)" style="endArrow=block;endFill=1;html=0;dashed=0;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
           <mxGeometry relative="1" as="geometry">
             <mxPoint x="383" y="472" as="sourcePoint"/>
             <mxPoint x="538.5" y="472" as="targetPoint"/>
@@ -132,7 +132,7 @@
             <mxPoint x="690.5" y="518" as="targetPoint"/>
           </mxGeometry>
         </mxCell>
-        <mxCell id="c27" value="refreshRegistrationWindow()" style="endArrow=block;endFill=1;html=0;dashed=0;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+        <mxCell id="c27" value="registrationWindowOpen(now)" style="endArrow=block;endFill=1;html=0;dashed=0;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
           <mxGeometry relative="1" as="geometry">
             <mxPoint x="383" y="564" as="sourcePoint"/>
             <mxPoint x="538.5" y="564" as="targetPoint"/>
@@ -148,10 +148,10 @@
             </Array>
           </mxGeometry>
         </mxCell>
-        <mxCell id="c29" value="registrationOpen = opens_at &lt;= now &lt; closes_at" style="text;html=0;whiteSpace=wrap;fontSize=9;fontStyle=0;fontColor=#1F2933;align=left;verticalAlign=middle;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
-          <mxGeometry x="598.5" y="672.25" width="244" height="13.5" as="geometry"/>
+        <mxCell id="c29" value="now &gt;= opens_at and now &lt; closes_at" style="text;html=0;whiteSpace=wrap;fontSize=9;fontStyle=0;fontColor=#1F2933;align=left;verticalAlign=middle;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="598.5" y="672.25" width="201" height="13.5" as="geometry"/>
         </mxCell>
-        <mxCell id="c30" value="Success(open = true)" style="endArrow=open;endFill=0;html=0;dashed=1;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+        <mxCell id="c30" value="Success(open at now = true)" style="endArrow=open;endFill=0;html=0;dashed=1;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
           <mxGeometry relative="1" as="geometry">
             <mxPoint x="383" y="735" as="sourcePoint"/>
             <mxPoint x="233" y="735" as="targetPoint"/>
@@ -172,7 +172,7 @@
             <mxPoint x="716.5" y="450" as="targetPoint"/>
           </mxGeometry>
         </mxCell>
-        <mxCell id="c34" value="enroll() and drop() still read only registration_open, so Yuhua's rules are unchanged" style="shape=note;whiteSpace=wrap;html=0;size=12;fillColor=#FFFDE7;strokeColor=#C9A227;align=left;verticalAlign=middle;fontSize=9;fontFamily=Microsoft YaHei;spacingLeft=6;" vertex="1" parent="1">
+        <mxCell id="c34" value="the state is evaluated from the stored times on every enroll / drop request, so it cannot go stale" style="shape=note;whiteSpace=wrap;html=0;size=12;fillColor=#FFFDE7;strokeColor=#C9A227;align=left;verticalAlign=middle;fontSize=9;fontFamily=Microsoft YaHei;spacingLeft=6;" vertex="1" parent="1">
           <mxGeometry x="114.5" y="582" width="178" height="51" as="geometry"/>
         </mxCell>
       </root>

@@ -481,6 +481,53 @@ void test_uc15_registration_window() {
     CHECK(fixture.context.rule().maximum_credits == 12);
 }
 
+// 时段状态按请求时刻现算：保存后时间继续走，状态不会停在旧值。
+void test_uc15_window_is_evaluated_at_request_time() {
+    Fixture fixture;
+    AdministratorService administration(fixture.context);
+    fixture.context.set_now_for_tests("2026-11-03T10:00");
+
+    CHECK_CODE(administration.set_registration_period(
+                   fixture.admin, "2026-11-02T08:00", "2026-11-13T18:00"),
+               ResultCode::Success);
+
+    // 纯函数：窗口内为开放，正好到关闭时刻即为关闭。
+    CHECK(fixture.context.registration_window_open());
+    CHECK(fixture.context.registration_window_open_at("2026-11-02T08:00"));
+    CHECK(fixture.context.registration_window_open_at("2026-11-13T17:59"));
+    CHECK(!fixture.context.registration_window_open_at("2026-11-13T18:00"));
+    CHECK(!fixture.context.registration_window_open_at("2026-11-02T07:59"));
+
+    // 保存时是开放，时间走到关闭之后：请求前现算即关闭，选课被拒绝，
+    // 说明状态不是保存时算一次就固定下来的。
+    fixture.context.set_now_for_tests("2026-11-13T18:30");
+    CHECK(!fixture.context.registration_window_open());
+    fixture.context.refresh_registration_window();
+    CHECK(!fixture.context.rule().registration_open);
+    CHECK_CODE(fixture.context.registration().enroll(1001, 10),
+               ResultCode::RegistrationClosed);
+
+    // 时间回到窗口内：现算后重新开放。
+    fixture.context.set_now_for_tests("2026-11-04T09:00");
+    fixture.context.refresh_registration_window();
+    CHECK(fixture.context.rule().registration_open);
+    CHECK_CODE(fixture.context.registration().enroll(1001, 10),
+               ResultCode::Success);
+
+    // 管理员手动关闭会清空时段，避免下一次现算又被时段打开。
+    CHECK_CODE(administration.close_registration(fixture.admin),
+               ResultCode::Success);
+    CHECK(fixture.context.rule().opens_at.empty());
+    CHECK(fixture.context.rule().closes_at.empty());
+    CHECK(!fixture.context.registration_window_open());
+
+    // 未设置时段时沿用管理员的手动开关。
+    Fixture manual;
+    manual.context.set_now_for_tests("2026-11-04T09:00");
+    CHECK(manual.context.rule().opens_at.empty());
+    CHECK(manual.context.registration_window_open());
+}
+
 // ---------------------------------------------------------------------------
 // UC16 Manage Student / Teacher Information
 // ---------------------------------------------------------------------------
@@ -699,6 +746,7 @@ int main() {
     test_uc13_time_change_must_not_break_existing_timetables();
     test_uc14_capacity_rules();
     test_uc15_registration_window();
+    test_uc15_window_is_evaluated_at_request_time();
     test_uc16_student_records();
     test_uc16_teacher_records();
     test_data_integrity_check();

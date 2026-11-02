@@ -1,33 +1,15 @@
-﻿Team 4 选课系统 —— 第 0 周编译与测试证据（Zhu Ziliang）
-记录时间：2026-11-01 (Week 0, Zhu Ziliang)
+Team 4 选课系统 —— 第 0 周编译与测试证据（Zhu Ziliang）
+记录时间：2026-11-01（Task 3 图与选课时段判定按评审意见修订后重跑）
 编译器：g++.exe (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 8.1.0
-==============================================================================
+编译结果：starter=0  teacher_admin=0  demo=0（0 = 成功，-Wall -Wextra 零警告）
 
-
-=== build course_registration_business_rules_tests ===
-OK: C:\Users\MSI_NB\Desktop\deepseek harness 工作文件夹\improved-university-course-registration-system\build\course_registration_business_rules_tests.exe
-
-=== build teacher_and_administration_services_tests ===
-OK: C:\Users\MSI_NB\Desktop\deepseek harness 工作文件夹\improved-university-course-registration-system\build\teacher_and_administration_services_tests.exe
-
-=== build course_registration_console_demonstration ===
-OK: C:\Users\MSI_NB\Desktop\deepseek harness 工作文件夹\improved-university-course-registration-system\build\course_registration_console_demonstration.exe
-
-=== build teacher_and_administration_demonstration ===
-OK: C:\Users\MSI_NB\Desktop\deepseek harness 工作文件夹\improved-university-course-registration-system\build\teacher_and_administration_demonstration.exe
-
-=== run course_registration_business_rules_tests ===
+====== 测试 1：选课规则（Yuhua）======
 All registration tests passed
 
-=== run teacher_and_administration_services_tests ===
-PASS: 177 checks, 0 failure(s)
+====== 测试 2：教师/管理员（Zhu Ziliang，含时段按请求现算）======
+PASS: 194 checks, 0 failure(s)
 
-ALL BUILD AND TESTS PASSED
-
-==============================================================================
-命令行演示输出（含团队说明第 5 节的每周共同场景）
-==============================================================================
-
+====== 命令行演示（含每周共同场景与 UC15 时段现算）======
 
 === UC09 View Assigned Teaching Classes ===
   Dr. Wang lists own teaching classes
@@ -84,10 +66,17 @@ ALL BUILD AND TESTS PASSED
   Admin sets the period to 2026-11-02T08:00 -> 2026-11-13T18:00
     -> [0] registration period set to 2026-11-02T08:00 -> 2026-11-13T18:00; registration is open now at 2026-11-03T10:00
      registration_open = true
+
+     the state is evaluated at request time, not cached at save time:
+     now = 2026-11-13T18:30, stored flag is still true
+     after refresh at the request: closed
+  Alice tries to enroll after the window closed
+    -> [1] Registration period closed
+     now = 2026-11-04T09:00, after refresh: open
   Admin sets an inverted period
     -> [9] the registration period must start before it ends (2026-11-13T18:00 -> 2026-11-02T08:00)
   Admin closes registration
-    -> [0] registration closed by the administrator
+    -> [0] registration closed by the administrator; set a new period to reopen
   Alice tries to enroll while registration is closed
     -> [1] Registration period closed
 

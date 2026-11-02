@@ -72,7 +72,8 @@ def figure1_object_diagram():
     diagram.object(
         "e2", 420, 470, "e2 : Enrollment",
         ["student_id = 1002", "teaching_class_id = 10",
-         "status = dropped", 'dropped_at = "2026-11-03T10:04"'],
+         'enrolled_at = "2026-11-03T10:00"', "status = dropped",
+         'dropped_at = "2026-11-03T10:01"'],
         width=270)
     diagram.object(
         "bob", 420, 650, "bob : Student",
@@ -98,7 +99,7 @@ def figure1_object_diagram():
     diagram.link("e2", "tc10", label="teaching class", path=[
         (555, 470), (555, 357)])
     diagram.link("e2", "bob", label="student", path=[
-        (555, 576), (555, 650)])
+        (555, 593), (555, 650)])
     diagram.link("r1", "tc10", label="in force for", path=[
         (310, 520), (380, 520), (380, 320), (420, 320)])
 
@@ -107,10 +108,12 @@ def figure1_object_diagram():
         "Derived value shown by the teacher and administrator views:\n"
         "remaining_seats = capacity(1) - active enrollments(1) = 0")
     diagram.note(
-        60, 660, 330, 74,
-        "e2 keeps status = dropped as history.\n"
-        "Dropped records do not consume a seat,\n"
-        "so only e1 is counted for tc10.")
+        60, 640, 340, 88,
+        "Timeline: bob took the only seat at\n"
+        "10:00 and dropped it at 10:01, which\n"
+        "freed the seat; alice could enroll at\n"
+        "10:02. At 10:05 the state is capacity 1,\n"
+        "one active enrollment, 0 remaining seats.")
     save(diagram, "fig1_object_diagram_state",
          "Fig1 Object diagram - registration state")
 
@@ -227,7 +230,8 @@ def figure3_uc13():
 def figure4_uc14():
     diagram = SequenceDiagram(
         "Figure 4  UC14 Set Teaching Class Capacity",
-        "The new capacity may not be lower than the number of active enrollments")
+        "The new capacity may not be lower than the number of active "
+        "enrollments; remaining seats are derived, never stored")
 
     admin = diagram.participant("Administrator", kind="actor")
     page = diagram.participant("AdminPage")
@@ -236,16 +240,18 @@ def figure4_uc14():
     registration = diagram.participant("RegistrationService")
 
     m = []
-    m.append(diagram.message(admin, page, "set capacity of TC-10 to 1"))
+    m.append(diagram.message(admin, page,
+                             "set the capacity of TC-10 to newCapacity"))
     m.append(diagram.message(page, service,
-                             "setTeachingClassCapacity(identity, 10, 1)"))
+                             "setTeachingClassCapacity(identity, TC-10, "
+                             "newCapacity)"))
     m.append(diagram.self_message(service, "canManageCatalog(identity)"))
-    m.append(diagram.message(service, context, "findTeachingClass(10)"))
+    m.append(diagram.message(service, context, "findTeachingClass(TC-10)"))
     m.append(diagram.ret(context, service, "class, capacity = 2"))
-    m.append(diagram.message(service, context, "enrollmentCount(10)"))
-    m.append(diagram.message(context, registration, "countActive(10)"))
-    m.append(diagram.ret(registration, context, "2"))
-    m.append(diagram.ret(context, service, "2"))
+    m.append(diagram.message(service, context, "enrollmentCount(TC-10)"))
+    m.append(diagram.message(context, registration, "countActive(TC-10)"))
+    m.append(diagram.ret(registration, context, "activeCount = 2"))
+    m.append(diagram.ret(context, service, "activeCount"))
 
     alt_start = len(m)
     m.append(diagram.ret(service, page,
@@ -255,20 +261,22 @@ def figure4_uc14():
 
     else_start = len(m)
     m.append(diagram.message(service, context,
-                             "applyTeachingClassChange(class, capacity = 1)"))
+                             "applyTeachingClassChange(class, newCapacity)"))
     m.append(diagram.message(context, registration,
                              "applyCatalogChange(courses, classes)"))
     m.append(diagram.ret(service, page,
-                         "Success(remainingSeats = 1)"))
+                         "Success(remainingSeats = newCapacity - activeCount)"))
     m.append(diagram.message(page, admin,
-                             "show capacity 1 and remaining seats 1", kind="async"))
+                             "show new capacity and remaining seats",
+                             kind="async"))
 
     diagram.fragment("alt", "[newCapacity < activeCount]",
                      alt_start, len(m) - 1,
                      dividers=[(else_start, "[newCapacity >= activeCount]")])
 
-    diagram.note(page, "remaining_seats is never stored; it is recomputed as "
-                       "capacity - active enrollments", m[4], width=210)
+    diagram.note(page, "example with activeCount = 2: newCapacity = 1 is "
+                       "rejected; newCapacity = 3 gives remainingSeats = 1",
+                 m[4], width=250)
 
     save(diagram, "fig4_uc14_set_teaching_class_capacity",
          "Fig4 UC14 Set Teaching Class Capacity")
@@ -281,7 +289,8 @@ def figure4_uc14():
 def figure5_uc15():
     diagram = SequenceDiagram(
         "Figure 5  UC15 Set Registration Period",
-        "The administrator sets the opening and closing time; an invalid period is rejected")
+        "The administrator sets the opening and closing time; the open state "
+        "is derived at request time, not cached")
 
     admin = diagram.participant("Administrator", kind="actor")
     page = diagram.participant("AdminPage")
@@ -305,12 +314,13 @@ def figure5_uc15():
                              "show reason, previous rule kept", kind="async"))
 
     else_start = len(m)
-    m.append(diagram.message(service, context, "applyRuleChange(rule)"))
+    m.append(diagram.message(service, context,
+                             "applyRuleChange(opens_at, closes_at)"))
     m.append(diagram.message(context, registration, "applyRuleChange(rule)"))
-    m.append(diagram.message(service, context, "refreshRegistrationWindow()"))
+    m.append(diagram.message(service, context, "registrationWindowOpen(now)"))
     m.append(diagram.self_message(
-        context, "registrationOpen = opens_at <= now < closes_at"))
-    m.append(diagram.ret(service, page, "Success(open = true)"))
+        context, "now >= opens_at and now < closes_at"))
+    m.append(diagram.ret(service, page, "Success(open at now = true)"))
     m.append(diagram.message(page, admin,
                              "show period and current state", kind="async"))
 
@@ -319,8 +329,9 @@ def figure5_uc15():
                      dividers=[(else_start, "[valid period]")])
 
     diagram.note(admin,
-                 "enroll() and drop() still read only registration_open, "
-                 "so Yuhua's rules are unchanged", m[8], width=178)
+                 "the state is evaluated from the stored times on every "
+                 "enroll / drop request, so it cannot go stale", m[8],
+                 width=178)
 
     save(diagram, "fig5_uc15_set_registration_period",
          "Fig5 UC15 Set Registration Period")

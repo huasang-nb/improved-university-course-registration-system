@@ -140,6 +140,22 @@ int main() {
                                                 "2026-11-13T18:00"));
     std::cout << "     registration_open = "
               << (context.rule().registration_open ? "true" : "false") << '\n';
+
+    std::cout << "\n     the state is evaluated at request time, not cached at save time:\n";
+    context.set_now_for_tests("2026-11-13T18:30");
+    std::cout << "     now = 2026-11-13T18:30, stored flag is still "
+              << (context.rule().registration_open ? "true" : "false") << '\n';
+    context.refresh_registration_window();
+    std::cout << "     after refresh at the request: "
+              << (context.rule().registration_open ? "open" : "closed") << '\n';
+    show("Alice tries to enroll after the window closed",
+         context.registration().enroll(1001, 10));
+
+    context.set_now_for_tests("2026-11-04T09:00");
+    context.refresh_registration_window();
+    std::cout << "     now = 2026-11-04T09:00, after refresh: "
+              << (context.rule().registration_open ? "open" : "closed") << '\n';
+
     show("Admin sets an inverted period",
          administration.set_registration_period(admin, "2026-11-13T18:00",
                                                 "2026-11-02T08:00"));

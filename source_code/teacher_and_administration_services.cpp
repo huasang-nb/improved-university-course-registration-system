@@ -394,15 +394,29 @@ void SystemContext::set_now_for_tests(const std::string& iso_minute) {
     fixed_now_ = iso_minute;
 }
 
+bool SystemContext::registration_window_open_at(
+    const std::string& moment) const {
+    const RegistrationRule current = registration_.registration_rule();
+    if (current.opens_at.empty() || current.closes_at.empty()) {
+        return current.registration_open;  // 未设置时段，用管理员的手动开关
+    }
+    // 固定宽度时间字符串可以直接比较先后；这里刻意拆成两个条件，
+    // 而不是写成数学式 now in [opens_at, closes_at)。
+    const bool after_open = moment >= current.opens_at;
+    const bool before_close = moment < current.closes_at;
+    return after_open && before_close;
+}
+
+bool SystemContext::registration_window_open() const {
+    return registration_window_open_at(now());
+}
+
 void SystemContext::refresh_registration_window() {
     RegistrationRule current = registration_.registration_rule();
     if (current.opens_at.empty() || current.closes_at.empty()) {
         return;  // 尚未设置时段，保留管理员的手动开关
     }
-    const std::string moment = now();
-    // 固定宽度时间字符串可以直接比较先后。
-    current.registration_open =
-        moment >= current.opens_at && moment < current.closes_at;
+    current.registration_open = registration_window_open_at(now());
     registration_.apply_rule_change(current);
 }
 
@@ -960,10 +974,16 @@ OperationResult AdministratorService::close_registration(
     if (!PermissionRules::can_set_registration_period(user)) {
         return denied("closing the registration period");
     }
+    // 清空起止时间：手动关闭作为覆盖状态，避免下一次按请求时刻现算时
+    // 又被已经设好的时段重新打开。要恢复开放，管理员重新设置时段。
     RegistrationRule rule = context_.rule();
     rule.registration_open = false;
+    rule.opens_at.clear();
+    rule.closes_at.clear();
     context_.apply_rule_change(rule);
-    return {ResultCode::Success, "registration closed by the administrator"};
+    return {ResultCode::Success,
+            "registration closed by the administrator; set a new period to "
+            "reopen"};
 }
 
 OperationResult AdministratorService::create_student(

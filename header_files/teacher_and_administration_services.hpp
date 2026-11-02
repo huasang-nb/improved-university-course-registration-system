@@ -174,6 +174,16 @@ public:
     // 否则不同的运行日期会得到不同结果。
     std::string now() const;
     void set_now_for_tests(const std::string& iso_minute);
+
+    // 时段是否开放：按给定时刻与已设置的 opens_at / closes_at 现算，
+    // 不在管理员保存时缓存结果，避免时间走过去以后状态仍是旧值。
+    // 未设置起止时间时，沿用管理员的手动开关。
+    bool registration_window_open_at(const std::string& moment) const;
+    bool registration_window_open() const;
+
+    // 把现算结果写回 RegistrationService，供 enroll()/drop() 读取。
+    // 每次选课或退课请求前调用一次；调用位置（集成层或 enroll() 入口）
+    // 待三人确认，见 documentation/interface_change_request.md。
     void refresh_registration_window();
 
 private:

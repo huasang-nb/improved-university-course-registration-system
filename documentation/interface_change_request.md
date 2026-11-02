@@ -76,10 +76,14 @@
 
 ## 四、另外需要你确认的两处行为
 
-1. **`registration_open` 的刷新责任**：管理员设置时段后，由
-   `SystemContext::refresh_registration_window()` 依据 `now()` 与 `opens_at/closes_at`
-   计算 `registration_open` 并写回。`enroll()`/`drop()` 仍然只读这一个布尔值，不知道时间段的存在。
-   若你希望 `enroll()` 自己按时间判断，请告诉我，我把刷新逻辑移进 `enroll()`。
+1. **选课时段按请求时刻现算，不缓存**：`SystemContext::registration_window_open_at(moment)`
+   用两个条件判断（`moment >= opens_at` 且 `moment < closes_at`），
+   `refresh_registration_window()` 把结果写回 `registration_open`；`enroll()`/`drop()`
+   仍然只读这一个布尔值，不知道时间段的存在。
+   注意：如果只在管理员保存时段时算一次，时间走过关闭时刻后状态会停在旧值，
+   所以每次选课或退课请求前都要再算一次。**需要你拍板放在哪里**：
+   `enroll()` 入口（要改你的文件），或 Web/控制台一层（不改你的文件）。
+   管理员手动 `close_registration` 会清空起止时间，避免下一次现算又被时段打开。
 2. **`enroll()` 不校验学生是否已登记**：现有实现只检查教学班是否存在。未登记学生的有效选课
    会出现在人数里但不在教师名单中，由 `check_data_integrity` 报告为不一致。
    是否需要我在选课入口加"学生必须已登记"的检查（会改变你现有测试中

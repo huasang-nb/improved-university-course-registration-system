@@ -26,7 +26,9 @@
 学生 alice、bob，教师 dr_wang，课程 se101，教学班 tc10，选课记录 e1、e2，以及当时生效的选课规则 r1。
 tc10 的 `capacity = 1`，只有 e1 是 `active`，e2 已是 `dropped`，因此 `remaining_seats = 1 - 1 = 0`，
 与教师端和选课检查看到的结果一致；这条关系正是团队说明要求"容量与选课记录一致"的检查点。
-e2 保留 `dropped` 作为历史，不占名额；一对一、一对多的链接（Course 与 TeachingClass、
+时间线上，bob 在 10:00 占到这个唯一名额、10:01 退课让出，alice 才能在 10:02 选进来，
+因此 10:05 的状态与余量 0 并不矛盾。e2 保留 `dropped` 作为历史，不占名额；
+一对多链接（Course 与 TeachingClass、
 Student 与 Enrollment）也可从图中直接读出。
 
 **English**: The diagram shows one concrete moment (2026-11-03 10:05) with eight instance
@@ -34,7 +36,9 @@ objects and their attribute values: students `alice` and `bob`, teacher `dr_wang
 `se101`, teaching class `tc10`, enrollments `e1`/`e2`, and the registration rule `r1` in force.
 `tc10` has `capacity = 1` and only `e1` is `active`, while `e2` is already `dropped`, so
 `remaining_seats = 1 - 1 = 0`, which is exactly what the teacher view and the enrollment check
-report. `e2` keeps `dropped` as history and does not occupy a seat, and the one-to-many links
+report. The timeline is part of the figure: bob held the only seat from 10:00, dropped it at
+10:01 and freed it, so alice could enroll at 10:02. `e2` keeps `dropped` as history, does not
+occupy a seat, and the one-to-many links
 (Course to TeachingClass, Student to Enrollment) can be read directly from the diagram.
 
 ### Figure 2　UC09 View Assigned Teaching Classes
@@ -73,6 +77,9 @@ involved here, so no enrollment record is created or changed.
 返回 `CapacityBelowEnrollment` 并说明差多少，容量与已有选课记录都不变。
 只有在人数不超过新容量时才写回，并由选课服务按 `capacity - active count` 重新得出剩余名额，
 所以教师端人数、学生端余量与管理员看到的数字同步变化，不需要再存一份计数。
+图里不写死同一组数字：成功分支写 `remainingSeats = newCapacity - activeCount`，
+并在注释中给出示例（activeCount = 2 时，newCapacity = 1 被拒绝、newCapacity = 3 得余量 1），
+避免失败分支与成功分支互相矛盾。
 
 **English**: Before changing a capacity, the service reads the current number of active
 enrollments. If the new capacity is smaller than that number it returns
@@ -80,21 +87,28 @@ enrollments. If the new capacity is smaller than that number it returns
 records unchanged. Only a capacity that is at least the active count is written back, and the
 registration service then recomputes the remaining seats as `capacity - active count`, so the
 teacher count, the student view and the administrator view change together without storing a
-second counter.
+second counter. The success branch states `remainingSeats = newCapacity - activeCount`
+instead of a hard-coded number, and a note gives one example: with activeCount = 2,
+newCapacity = 1 is rejected while newCapacity = 3 gives 1 remaining seat.
 
 ### Figure 5　UC15 Set Registration Period
 
 **中文**：管理员提交开始与结束时间后，服务校验时间格式与先后顺序，格式错误或起止颠倒
 返回 `InvalidInput` 并保留原规则；合法时写回规则并立即按"
-`opens_at <= now < closes_at`
+`now >= opens_at` 与 `now < closes_at`
 "换算出 `registration_open`。选课与退课仍只读这一个布尔值，Yuhua 的检查顺序不受影响，
 因此时段改动不会绕过任何一条选课规则。
+时段状态按请求时刻现算，不在保存时只算一次，否则时间走过关闭时刻后仍会停在旧值；
+管理员手动关闭会清空起止时间，避免下一次现算又被时段打开。
 
 **English**: After the administrator submits the opening and closing time, the service validates
 the format and the ordering; a malformed timestamp or `start >= end` returns `InvalidInput` and
-keeps the previous rule. A valid period is written back and immediately turned into
-`registration_open` using `opens_at <= now < closes_at`. Enrollment and drop still read only that
-boolean, so Yuhua's check order is untouched and changing the window cannot bypass any rule.
+keeps the previous rule. A valid period is written back and `registration_open` is derived from
+two comparisons, `now >= opens_at` and `now < closes_at`. The state is evaluated at request
+time instead of being cached when it is saved, otherwise it would stay stale once the closing
+time has passed; closing registration manually clears the window. Enrollment and drop still
+read only that boolean, so Yuhua's check order is untouched and changing the window cannot
+bypass any rule.
 
 ### Figure 6　UC16 Manage Student / Teacher Information
 
