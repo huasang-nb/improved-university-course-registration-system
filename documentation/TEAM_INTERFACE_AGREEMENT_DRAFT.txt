@@ -1,0 +1,26 @@
+小组共享接口草案（需要三人确认）
+
+当前状态：本文件只描述第一周的内存版代码。合并到 GitHub 主项目之前，三人应确认同一套数据名称和函数接口。
+
+一、统一的数据
+Course：课程目录中的一门课，包含编号、课程代码、名称、学分。
+TeachingClass：某门 Course 的一个教学班，包含授课教师、容量和上课时间。
+Enrollment：学生与教学班的选课记录，状态为 Active 或 Dropped。
+RegistrationRule：选课时段是否开放、最大学分数。
+详细字段见 header_files/course_registration_business_rules.hpp。
+
+二、当前可调用的函数
+RegistrationService::enroll(student_id, teaching_class_id)：按规则选课，返回结果代码和文字原因。
+RegistrationService::drop(student_id, teaching_class_id)：退课，返回结果代码和文字原因。
+RegistrationService::remaining_seats(teaching_class_id)：查询剩余名额。
+RegistrationService::enrollment_count(teaching_class_id)：查询有效选课人数。
+RegistrationService::active_enrollments(student_id)：读取学生的有效选课记录。
+
+三、三人还需统一的问题
+1. 学生、教师、课程和教学班编号最终使用什么类型。
+2. 一周上课时间如何表示，是否沿用星期数与当天分钟数。
+3. 学分上限由哪里设置和保存。
+4. 数据持久化方案、登录接口、网页或其他用户界面如何接入。
+5. 三人修改共享头文件时如何通知并同步其他模块。
+
+分工建议：Zhang Yuhua 负责选课、退课及之后的登录；Zhang Yikai 负责共享数据、搜索和课表；Zhu Ziliang 负责教师查询、管理员修改和权限。具体以小组协商后的结果为准。
