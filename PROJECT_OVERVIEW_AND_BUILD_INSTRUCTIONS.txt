@@ -26,10 +26,9 @@ g++ -std=c++17 -Iheader_files source_code/course_registration_business_rules.cpp
 运行测试：
 .\course_registration_business_rules_tests.exe
 
-也提供 CMakeLists.txt，供已安装 CMake 的组员使用。
 
 四、推荐阅读顺序
 先看 header_files/course_registration_business_rules.hpp，了解数据和可调用函数。
-再看 source_code/course_registration_business_rules.cpp 中的 enroll()，按编号读 1 至 7 步。
+再看 source_code/course_registration_business_rules.cpp 中的 enroll()。
 然后运行 source_code/course_registration_console_demonstration.cpp。
 最后看 automated_tests/course_registration_business_rules_tests.cpp 中各规则的例子。
