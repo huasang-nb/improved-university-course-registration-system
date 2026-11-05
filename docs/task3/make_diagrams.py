@@ -231,7 +231,8 @@ def figure4_uc14():
     diagram = SequenceDiagram(
         "Figure 4  UC14 Set Teaching Class Capacity",
         "The new capacity may not be lower than the number of active "
-        "enrollments; remaining seats are derived, never stored")
+        "enrollments; remaining seats are derived, never stored. "
+        "TC-20 is an independent example, not the state shown in the object diagram")
 
     admin = diagram.participant("Administrator", kind="actor")
     page = diagram.participant("AdminPage")
@@ -241,15 +242,15 @@ def figure4_uc14():
 
     m = []
     m.append(diagram.message(admin, page,
-                             "set the capacity of TC-10 to newCapacity"))
+                             "set the capacity of TC-20 to newCapacity"))
     m.append(diagram.message(page, service,
-                             "setTeachingClassCapacity(identity, TC-10, "
+                             "setTeachingClassCapacity(identity, TC-20, "
                              "newCapacity)"))
     m.append(diagram.self_message(service, "canManageCatalog(identity)"))
-    m.append(diagram.message(service, context, "findTeachingClass(TC-10)"))
+    m.append(diagram.message(service, context, "findTeachingClass(TC-20)"))
     m.append(diagram.ret(context, service, "class, capacity = 2"))
-    m.append(diagram.message(service, context, "enrollmentCount(TC-10)"))
-    m.append(diagram.message(context, registration, "countActive(TC-10)"))
+    m.append(diagram.message(service, context, "enrollmentCount(TC-20)"))
+    m.append(diagram.message(context, registration, "countActive(TC-20)"))
     m.append(diagram.ret(registration, context, "activeCount = 2"))
     m.append(diagram.ret(context, service, "activeCount"))
 
@@ -358,10 +359,10 @@ def figure6_uc16():
                              "createStudent(identity, record)"))
     m.append(diagram.self_message(service, "canManagePeople(identity)"))
     m.append(diagram.message(service, context, "findStudent(studentId)"))
-    m.append(diagram.ret(context, service, "not found"))
+    m.append(diagram.ret(context, service, "found or not found"))
     m.append(diagram.message(service, context,
                              "findStudentByNumber(studentNumber)"))
-    m.append(diagram.ret(context, service, "not found"))
+    m.append(diagram.ret(context, service, "found or not found"))
     m.append(diagram.self_message(
         service, "validate id > 0, number and name not blank"))
 
@@ -381,8 +382,9 @@ def figure6_uc16():
                      dividers=[(else_start, "[record is valid]")])
 
     diagram.note(service,
-                 "the same flow serves teachers: createTeacher / "
-                 "updateTeacher / removeTeacher", m[2], width=230)
+                 "student creation is the example; teacher creation is "
+                 "similar, updates and removals have their own checks",
+                 m[2], width=250)
 
     save(diagram, "fig6_uc16_manage_student_teacher_information",
          "Fig6 UC16 Manage Student / Teacher Information")

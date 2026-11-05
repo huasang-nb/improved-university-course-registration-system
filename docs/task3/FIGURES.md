@@ -79,7 +79,7 @@ involved here, so no enrollment record is created or changed.
 所以教师端人数、学生端余量与管理员看到的数字同步变化，不需要再存一份计数。
 图里不写死同一组数字：成功分支写 `remainingSeats = newCapacity - activeCount`，
 并在注释中给出示例（activeCount = 2 时，newCapacity = 1 被拒绝、newCapacity = 3 得余量 1），
-避免失败分支与成功分支互相矛盾。
+避免失败分支与成功分支互相矛盾。图中的教学班编号是 TC-20，与对象图里的 TC-10 不是同一时刻的数据，属于独立示例。
 
 **English**: Before changing a capacity, the service reads the current number of active
 enrollments. If the new capacity is smaller than that number it returns
@@ -89,7 +89,8 @@ registration service then recomputes the remaining seats as `capacity - active c
 teacher count, the student view and the administrator view change together without storing a
 second counter. The success branch states `remainingSeats = newCapacity - activeCount`
 instead of a hard-coded number, and a note gives one example: with activeCount = 2,
-newCapacity = 1 is rejected while newCapacity = 3 gives 1 remaining seat.
+newCapacity = 1 is rejected while newCapacity = 3 gives 1 remaining seat. The class in this
+figure is TC-20, an independent example and not the TC-10 snapshot of the object diagram.
 
 ### Figure 5　UC15 Set Registration Period
 
@@ -115,16 +116,17 @@ bypass any rule.
 **中文**：管理员新建学生账号时，服务先校验角色，再按编号和学号各查一次是否已存在，
 最后校验编号为正、学号与姓名非空；重复或空字段分别返回 `DuplicateIdentifier` / `InvalidInput`，
 不写入任何记录。通过校验后只写入账号资料，已选课记录保持不变。
-教师资料的增删改走同一流程（`createTeacher` / `updateTeacher` / `removeTeacher`），
-删除仍负责教学班或仍有有效选课的学生都会因 `CatalogInUse` 被拒绝。
+本图以“创建学生”为例；创建教师走类似流程（`createTeacher`），而修改（`updateStudent` / `updateTeacher`）与删除（`removeStudent` / `removeTeacher`）各有自己的检查：删除仍负责教学班的教师、或仍有有效选课的学生，都会因 `CatalogInUse` 被拒绝。
 
 **English**: When the administrator creates a student account, the service checks the role, looks
 the identifier up by `student_id` and by `student_number`, and then validates that the id is
 positive and that the number and name are not blank; duplicates and blank fields return
 `DuplicateIdentifier` / `InvalidInput` and nothing is written. Once the checks pass only the
-account record is stored and existing enrollments stay untouched. Teacher records follow the same
-flow through `createTeacher` / `updateTeacher` / `removeTeacher`, and deletion is refused with
-`CatalogInUse` while the teacher still teaches a class or the student still has active enrollments.
+account record is stored and existing enrollments stay untouched. The diagram uses student
+creation as an example; teacher creation follows a similar process, while updates
+(`updateStudent` / `updateTeacher`) and removals (`removeStudent` / `removeTeacher`) have their own
+checks. Removal is refused with `CatalogInUse` while the teacher still teaches a class or the
+student still has active enrollments.
 
 ## 三、自查（对应 Task 3 手册第四节）
 
@@ -144,3 +146,14 @@ flow through `createTeacher` / `updateTeacher` / `removeTeacher`, and deletion i
   以免与 Task 2 用例图不一致。
 - 报告编号：本组 6 张图按 Figure 1–6 排列；若与 Yikai/Yuhua 的图合并后需要重新编号，
   只改标题文字，不影响图源。
+
+
+## 五、术语统一：有效选课状态用 `active`
+
+- 代码里的枚举是 `EnrollmentStatus::Active` / `EnrollmentStatus::Dropped`，
+  见 `header_files/course_registration_business_rules.hpp`，对象图与测试都按这个取值绘制。
+- 因此建议全组统一写 **`active` / `dropped`**；若另一份图用的是 `enrolled`，
+  建议改那一份的图，而不是改代码枚举（改枚举会牵动头文件、测试、接口文档和四张图）。
+- 如果三人最终决定用 `enrolled`，需要同步修改的位置：
+  `EnrollmentStatus` 枚举、`check_data_integrity` 与测试断言里的词、对象图属性值、
+  `docs/interfaces.md` 的 `EnrollmentStatus` 一行、以及另一份图的 `active`。
