@@ -87,6 +87,18 @@ public:
     int enrollment_count(int teaching_class_id) const;
     std::vector<Enrollment> active_enrollments(int student_id) const;
 
+    // ---- [缺陷-001/003 修复，待 Zhang Yuhua 复核] 选课时段的统一判断入口 ----
+    // enroll() 和 drop() 都调用 registration_open_now()，不再只看保存下来的
+    // registration_open 布尔值，因此时间走过关闭时刻后会自动变为关闭。
+    // 判断规则（两个比较条件，不写数学式链式表达式）：
+    //   * 设置了 opens_at 与 closes_at 时：now >= opens_at 且 now < closes_at；
+    //   * 未设置起止时间时：沿用管理员的手动开关 registration_open。
+    // 手动 close_registration() 会清空起止时间，所以普通刷新不会把它重新打开。
+    void set_fixed_now_for_tests(const std::string& iso_minute);
+    bool registration_open_now() const;
+    // 同一个判断，用于显式给定时刻（例如测试或界面预览），逻辑只有这一处。
+    bool registration_open_at(const std::string& moment) const;
+
     // ---- [Zhu Ziliang 追加，待 Zhang Yuhua 复核] 教师/管理员模块只读接口 ----
     // 目的：名单、人数、余量和管理员一致性检查都从同一份选课记录取值，
     // 不另存计数，避免教师端与选课端显示不同人数。
@@ -110,6 +122,8 @@ private:
     std::vector<TeachingClass> teaching_classes_;
     std::vector<Enrollment> enrollments_;
     RegistrationRule rule_;
+    // 空表示用本机当前时间；测试由 SystemContext 下发固定时间。
+    std::string fixed_now_;
 };
 
 }  // namespace course_registration

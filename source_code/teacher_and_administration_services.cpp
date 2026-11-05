@@ -392,19 +392,14 @@ std::string SystemContext::now() const {
 
 void SystemContext::set_now_for_tests(const std::string& iso_minute) {
     fixed_now_ = iso_minute;
+    // 选课服务自己也要用同一个"现在"，否则时段判断会与管理员模块不一致。
+    registration_.set_fixed_now_for_tests(iso_minute);
 }
 
 bool SystemContext::registration_window_open_at(
     const std::string& moment) const {
-    const RegistrationRule current = registration_.registration_rule();
-    if (current.opens_at.empty() || current.closes_at.empty()) {
-        return current.registration_open;  // 未设置时段，用管理员的手动开关
-    }
-    // 固定宽度时间字符串可以直接比较先后；这里刻意拆成两个条件，
-    // 而不是写成数学式 now in [opens_at, closes_at)。
-    const bool after_open = moment >= current.opens_at;
-    const bool before_close = moment < current.closes_at;
-    return after_open && before_close;
+    // 只保留一处实现：交给选课服务判断，enroll()/drop() 用的是同一段逻辑。
+    return registration_.registration_open_at(moment);
 }
 
 bool SystemContext::registration_window_open() const {
@@ -412,6 +407,9 @@ bool SystemContext::registration_window_open() const {
 }
 
 void SystemContext::refresh_registration_window() {
+    // 仅把现算结果同步到 registration_open，供界面/演示显示当前状态。
+    // enroll()/drop() 自己会现算，不再依赖这个布尔值，所以即使不调用本函数
+    // 也不会出现"时段已结束仍能选课"的问题。
     RegistrationRule current = registration_.registration_rule();
     if (current.opens_at.empty() || current.closes_at.empty()) {
         return;  // 尚未设置时段，保留管理员的手动开关
@@ -788,6 +786,22 @@ OperationResult AdministratorService::update_teaching_class(
 
     const int active = context_.enrollment_count(
         teaching_class.teaching_class_id);
+
+    // 缺陷-002 修复：教学班已有有效选课时，不允许改 course_id。
+    // 否则已选学生可能变成同时选同一门课的两个教学班，或改成高学分课程后
+    // 绕过学分上限；enroll() 的检查只在选课时做一次，管不到这种事后改动。
+    // 容量与上课时间仍按各自的规则继续校验（下面分别处理）。
+    if (teaching_class.course_id != existing.course_id && active > 0) {
+        return {ResultCode::InvalidInput,
+                "course_id of teaching class " +
+                    std::to_string(teaching_class.teaching_class_id) +
+                    " cannot be changed from " +
+                    std::to_string(existing.course_id) + " to " +
+                    std::to_string(teaching_class.course_id) + " while it has " +
+                    std::to_string(active) +
+                    " active enrollment(s); ask the students to drop first"};
+    }
+
     if (teaching_class.capacity < active) {
         return {ResultCode::CapacityBelowEnrollment,
                 "capacity " + std::to_string(teaching_class.capacity) +

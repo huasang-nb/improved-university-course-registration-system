@@ -1,6 +1,24 @@
 #include "course_registration_business_rules.hpp"
 
+#include <ctime>
+
 namespace course_registration {
+namespace {
+
+// 默认时钟：本机当前时间，格式 "YYYY-MM-DDTHH:MM"，与 opens_at/closes_at 同构，
+// 固定宽度可以直接按字符串比较先后。
+std::string system_now() {
+    std::time_t current = std::time(nullptr);
+    std::tm* local_time = std::localtime(&current);
+    if (local_time == nullptr) {
+        return "1970-01-01T00:00";
+    }
+    char buffer[32] = {0};
+    std::strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M", local_time);
+    return std::string(buffer);
+}
+
+}  // namespace
 
 RegistrationService::RegistrationService(
     const std::vector<Course>& courses,
@@ -9,6 +27,26 @@ RegistrationService::RegistrationService(
     : courses_(courses),
       teaching_classes_(teaching_classes),
       rule_(rule) {}
+
+void RegistrationService::set_fixed_now_for_tests(
+    const std::string& iso_minute) {
+    fixed_now_ = iso_minute;
+}
+
+bool RegistrationService::registration_open_at(
+    const std::string& moment) const {
+    if (rule_.opens_at.empty() || rule_.closes_at.empty()) {
+        return rule_.registration_open;  // 未设置时段，用管理员的手动开关
+    }
+    const bool after_open = moment >= rule_.opens_at;
+    const bool before_close = moment < rule_.closes_at;
+    return after_open && before_close;
+}
+
+bool RegistrationService::registration_open_now() const {
+    const std::string moment = fixed_now_.empty() ? system_now() : fixed_now_;
+    return registration_open_at(moment);
+}
 
 const Course* RegistrationService::find_course(int course_id) const {
     for (const Course& course : courses_) {
@@ -62,8 +100,8 @@ std::vector<Enrollment> RegistrationService::active_enrollments(
 
 OperationResult RegistrationService::enroll(
     int student_id, int teaching_class_id) {
-    // 1. 只在选课开放期处理请求。
-    if (!rule_.registration_open) {
+    // 1. 只在选课开放期处理请求。按当前时间现算，不依赖保存下来的旧开关。
+    if (!registration_open_now()) {
         return {ResultCode::RegistrationClosed, "Registration period closed"};
     }
 
@@ -135,7 +173,8 @@ OperationResult RegistrationService::enroll(
 
 OperationResult RegistrationService::drop(
     int student_id, int teaching_class_id) {
-    if (!rule_.registration_open) {
+    // 与 enroll() 使用同一个判断入口，避免两边规则不一致。
+    if (!registration_open_now()) {
         return {ResultCode::RegistrationClosed, "Registration period closed"};
     }
 

@@ -528,6 +528,127 @@ void test_uc15_window_is_evaluated_at_request_time() {
     CHECK(manual.context.registration_window_open());
 }
 
+// 缺陷-001 复现：时段结束后不手动刷新，也必须拒绝选课和退课。
+void test_defect_001_enroll_after_window_closed() {
+    Fixture fixture;
+    AdministratorService administration(fixture.context);
+    fixture.context.set_now_for_tests("2026-11-03T10:00");
+
+    // 1. 固定 10:00，管理员设置当天 09:00～11:00 开放。
+    CHECK_CODE(administration.set_registration_period(
+                   fixture.admin, "2026-11-03T09:00", "2026-11-03T11:00"),
+               ResultCode::Success);
+    CHECK(fixture.context.rule().registration_open);
+
+    // 2. 时间推进到 12:00，不调用 refresh_registration_window()。
+    fixture.context.set_now_for_tests("2026-11-03T12:00");
+
+    // 3. 直接选课：必须拒绝，且不产生记录、不改变余量。
+    CHECK_CODE(fixture.context.registration().enroll(1001, 10),
+               ResultCode::RegistrationClosed);
+    CHECK(fixture.context.active_enrollments(1001).empty());
+    CHECK(fixture.context.enrollment_count(10) == 0);
+    CHECK(fixture.context.remaining_seats(10) == 2);
+
+    // 4. 退课走同一个判断入口，同样被拒绝。
+    fixture.context.set_now_for_tests("2026-11-03T10:30");
+    CHECK_CODE(fixture.context.registration().enroll(1001, 10),
+               ResultCode::Success);
+    fixture.context.set_now_for_tests("2026-11-03T12:00");
+    CHECK_CODE(fixture.context.registration().drop(1001, 10),
+               ResultCode::RegistrationClosed);
+    CHECK(fixture.context.enrollment_count(10) == 1);
+
+    // 5. 回到开放区间后重新可以选课，说明不是把开关写死。
+    fixture.context.set_now_for_tests("2026-11-03T10:30");
+    CHECK_CODE(fixture.context.registration().enroll(1002, 10),
+               ResultCode::Success);
+}
+
+// 缺陷-002 复现：教学班有有效选课时改课程，会绕过重复选课与学分限制。
+void test_defect_002_course_change_blocked_while_enrolled() {
+    Fixture fixture;
+    AdministratorService administration(fixture.context);
+
+    // 同一学生选中课程 1 的教学班 10 与课程 3 的教学班 30（时间不冲突）。
+    CHECK_CODE(fixture.context.registration().enroll(1001, 10),
+               ResultCode::Success);
+    CHECK_CODE(fixture.context.registration().enroll(1001, 30),
+               ResultCode::Success);
+
+    // 把教学班 30 改成课程 1：会让学生同时选同一门课的两个教学班。
+    const TeachingClass to_course_one =
+        make_class(30, 1, 300, 2, 3, 840, 900, "C301");
+    const OperationResult blocked =
+        administration.update_teaching_class(fixture.admin, to_course_one);
+    CHECK_CODE(blocked, ResultCode::InvalidInput);
+    CHECK_MESSAGE(blocked, "cannot be changed");
+    CHECK_MESSAGE(blocked, "active enrollment");
+
+    // 原数据保持不变，也没有出现重复选课。
+    TeachingClass stored{};
+    CHECK(fixture.context.find_teaching_class(30, stored));
+    CHECK(stored.course_id == 3);
+    std::vector<std::string> problems;
+    CHECK_CODE(administration.check_data_integrity(fixture.admin, problems),
+               ResultCode::Success);
+    CHECK(problems.empty());
+
+    // 只改时间、不改课程仍然允许。
+    const TeachingClass later_slot =
+        make_class(30, 3, 300, 2, 3, 900, 960, "C301");
+    CHECK_CODE(administration.update_teaching_class(fixture.admin, later_slot),
+               ResultCode::Success);
+    CHECK(fixture.context.find_teaching_class(30, stored));
+    CHECK(stored.course_id == 3);
+    CHECK(stored.meetings.size() == 1);
+    CHECK(stored.meetings[0].start_minute == 900);
+
+    // 学生退课之后可以改课程，说明限制只在有有效选课时生效。
+    CHECK_CODE(fixture.context.registration().drop(1001, 30),
+               ResultCode::Success);
+    CHECK_CODE(
+        administration.update_teaching_class(fixture.admin, to_course_one),
+        ResultCode::Success);
+    CHECK(fixture.context.find_teaching_class(30, stored));
+    CHECK(stored.course_id == 1);
+}
+
+// 缺陷-003 复现：管理员手动关闭后，普通时段刷新不能把它改回开放。
+void test_defect_003_manual_close_survives_refresh() {
+    Fixture fixture;
+    AdministratorService administration(fixture.context);
+    fixture.context.set_now_for_tests("2026-11-03T10:00");
+    CHECK_CODE(administration.set_registration_period(
+                   fixture.admin, "2026-11-03T09:00", "2026-11-03T11:00"),
+               ResultCode::Success);
+    CHECK(fixture.context.rule().registration_open);
+
+    // 手动关闭，然后做一次普通刷新：仍然是关闭。
+    CHECK_CODE(administration.close_registration(fixture.admin),
+               ResultCode::Success);
+    fixture.context.refresh_registration_window();
+    CHECK(!fixture.context.rule().registration_open);
+    CHECK(!fixture.context.registration_window_open());
+    CHECK_CODE(fixture.context.registration().enroll(1001, 10),
+               ResultCode::RegistrationClosed);
+
+    // 时间仍在原来的开放区间内，也不能被自动打开。
+    fixture.context.set_now_for_tests("2026-11-03T10:30");
+    fixture.context.refresh_registration_window();
+    CHECK(!fixture.context.rule().registration_open);
+    CHECK_CODE(fixture.context.registration().enroll(1001, 10),
+               ResultCode::RegistrationClosed);
+
+    // 管理员明确重新设置时段后才恢复。
+    CHECK_CODE(administration.set_registration_period(
+                   fixture.admin, "2026-11-03T09:00", "2026-11-03T11:00"),
+               ResultCode::Success);
+    CHECK(fixture.context.rule().registration_open);
+    CHECK_CODE(fixture.context.registration().enroll(1001, 10),
+               ResultCode::Success);
+}
+
 // ---------------------------------------------------------------------------
 // UC16 Manage Student / Teacher Information
 // ---------------------------------------------------------------------------
@@ -747,6 +868,9 @@ int main() {
     test_uc14_capacity_rules();
     test_uc15_registration_window();
     test_uc15_window_is_evaluated_at_request_time();
+    test_defect_001_enroll_after_window_closed();
+    test_defect_002_course_change_blocked_while_enrolled();
+    test_defect_003_manual_close_survives_refresh();
     test_uc16_student_records();
     test_uc16_teacher_records();
     test_data_integrity_check();
