@@ -132,6 +132,9 @@ OperationResult StudentQueryService::search_courses(
 
 OperationResult StudentQueryService::course_detail(int course_id,
                                                    CourseView& result) const {
+    // 进来先清空：查不到时要留下空结果，而不是上一次查询的内容。
+    // 网页那边就算忘了看结果码，也只会看到空课程，不会把旧课程当新课程显示。
+    result = CourseView{};
     Course course{};
     if (!context_.find_course(course_id, course)) {
         return {ResultCode::RecordNotFound, "Course not found"};
@@ -142,6 +145,8 @@ OperationResult StudentQueryService::course_detail(int course_id,
 
 OperationResult StudentQueryService::view_available_seats(
     int teaching_class_id, SeatsView& result) const {
+    // 同样是先清空，教学班不存在时返回全 0，不会残留上一个班的容量和余量。
+    result = SeatsView{};
     TeachingClass teaching_class{};
     if (!context_.find_teaching_class(teaching_class_id, teaching_class)) {
         return {ResultCode::RecordNotFound, "Teaching class not found"};

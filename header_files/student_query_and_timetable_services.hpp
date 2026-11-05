@@ -67,6 +67,11 @@ struct TimetableEntry {
 };
 
 // 学生端只读查询。构造时传入共享上下文，之后不再持有任何副本。
+//
+// 四个接口的输出参数用的是同一条约定：**进来先清空，失败时留空**。
+// 所以查不到、没权限、查无此人时，result 里不会残留上一次查询的数据；
+// 但调用方仍然要先看 OperationResult，成功才展示——清空只是兜底，
+// 不是“可以不看结果码”的许可。
 class StudentQueryService {
 public:
     explicit StudentQueryService(const SystemContext& context);

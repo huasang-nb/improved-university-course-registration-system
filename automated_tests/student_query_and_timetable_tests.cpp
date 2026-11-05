@@ -144,5 +144,32 @@ int main() {
     assert(query.view_timetable(bob, timetable).code == ResultCode::Success);
     assert(timetable.empty());
 
+    // 9. 查询失败后不能残留上一次的结果：先查存在的，再查不存在的。
+    //    顺序故意反过来，就是为了抓“忘了清空”这类问题。
+    assert(query.course_detail(1, detail).code == ResultCode::Success);
+    assert(detail.course.course_code == "SE101");
+    assert(query.course_detail(9999, detail).code == ResultCode::RecordNotFound);
+    assert(detail.course.course_code.empty());      // 旧课程代码不能留下
+    assert(detail.course.course_name.empty());
+    assert(detail.teaching_classes.empty());        // 旧教学班列表也不能留下
+
+    // 剩余名额同一个变量连查两次，第二次的教学班不存在。
+    assert(query.view_available_seats(10, seats).code == ResultCode::Success);
+    assert(seats.capacity == 2);
+    assert(seats.remaining_seats == 2 - seats.active_enrollments);  // 按公式，不写死
+    assert(query.view_available_seats(9999, seats).code ==
+           ResultCode::RecordNotFound);
+    assert(seats.teaching_class_id == 0);
+    assert(seats.course_code.empty());
+    assert(seats.capacity == 0);
+    assert(seats.remaining_seats == 0);             // 不能把上一个班的余量留下
+
+    // 课表：先取到 1 条，再用教师身份请求，被拒时也必须是空列表。
+    assert(query.view_timetable(alice, timetable).code == ResultCode::Success);
+    assert(timetable.size() == 1);
+    assert(query.view_timetable(teacher, timetable).code ==
+           ResultCode::PermissionDenied);
+    assert(timetable.empty());
+
     std::cout << "All student query and timetable tests passed\n";
 }
