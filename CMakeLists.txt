@@ -37,3 +37,31 @@ else()
     target_compile_options(course_registration_business_rules PRIVATE -Wall -Wextra)
     target_compile_options(teacher_and_administration_services PRIVATE -Wall -Wextra)
 endif()
+
+# ---------------------------------------------------------------------------
+# [Zhang Yikai 追加，待 Zhu Ziliang 复核] 学生查询模块（UC02 / UC03 / UC06）。
+# 只新增目标，不改动上面的目标名称与依赖。
+# ---------------------------------------------------------------------------
+add_library(student_query_and_timetable_services
+    source_code/student_query_and_timetable_services.cpp)
+target_link_libraries(student_query_and_timetable_services
+    PUBLIC teacher_and_administration_services)
+target_include_directories(student_query_and_timetable_services
+    PUBLIC header_files)
+
+add_executable(student_query_demonstration
+    source_code/student_query_demonstration.cpp)
+target_link_libraries(student_query_demonstration
+    PRIVATE student_query_and_timetable_services)
+
+add_executable(student_query_and_timetable_tests
+    automated_tests/student_query_and_timetable_tests.cpp)
+target_link_libraries(student_query_and_timetable_tests
+    PRIVATE student_query_and_timetable_services)
+add_test(NAME student_query_and_timetable COMMAND student_query_and_timetable_tests)
+
+if (MSVC)
+    target_compile_options(student_query_and_timetable_services PRIVATE /W4)
+else()
+    target_compile_options(student_query_and_timetable_services PRIVATE -Wall -Wextra)
+endif()
