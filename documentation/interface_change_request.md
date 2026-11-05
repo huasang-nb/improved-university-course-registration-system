@@ -88,3 +88,38 @@
    会出现在人数里但不在教师名单中，由 `check_data_integrity` 报告为不一致。
    是否需要我在选课入口加"学生必须已登记"的检查（会改变你现有测试中
    `enroll(9999, 10)` 一类调用的结果），请确认后再动。
+
+
+## 五、缺陷-001 / 002 / 003 的修复（涉及你的选课服务，请确认）
+
+缺陷记录见飞书缺陷表，代码在 `ba94148` 这一个提交里。
+
+### 缺陷-001：时段结束后仍然允许选课
+
+- `RegistrationService` 新增 `registration_open_now()` 与 `registration_open_at(moment)`，
+  作为**唯一的时段判断**：设置了 `opens_at`/`closes_at` 时用两个比较
+  （`moment >= opens_at` 且 `moment < closes_at`），未设置时沿用 `registration_open`。
+- `enroll()` 与 `drop()` 的第 1 步由 `if (!rule_.registration_open)` 改为
+  `if (!registration_open_now())`。检查顺序、错误码、名额计算都没有改动。
+- 新增 `set_fixed_now_for_tests()`；`SystemContext::set_now_for_tests()` 会把固定时间
+  同时下发给选课服务，保证测试里两边看到同一个"现在"。
+
+### 缺陷-003：手动关闭被普通刷新覆盖
+
+- `close_registration()` 在置 `false` 的同时清空 `opens_at`/`closes_at`：没有时段时只能读
+  手动开关，普通刷新无法把它重新打开，符合"手动关闭持续到管理员明确重新开放"。
+- `SystemContext::refresh_registration_window()` 保留，但只用于同步界面显示的
+  `registration_open`；`enroll()`/`drop()` 不再依赖它。
+
+### 缺陷-002：改教学班的 course_id 绕过重复选课与学分限制
+
+- `AdministratorService::update_teaching_class()`：教学班仍有有效选课时禁止修改 `course_id`，
+  返回 `InvalidInput` 并说明有多少条有效选课；容量与上课时间仍按各自规则校验；
+  学生退课后即可改课程。
+
+### 需要你确认的两点
+
+1. `enroll()`/`drop()` 改成调用 `registration_open_now()` 会改到你的文件，请确认可以接受。
+   若你想把时段判断留在集成层，我把这两行改回去，但"不刷新就过期"的问题会重新出现。
+2. `close_registration()` 采用"清空起止时间"的方式表达手动关闭，而不是新增
+   `manually_closed` 字段。若你希望保留日期，我改成加字段的方案，但共享结构会再多一个字段。

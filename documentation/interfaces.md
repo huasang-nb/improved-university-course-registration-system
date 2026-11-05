@@ -83,6 +83,8 @@ remaining_seats   = TeachingClass.capacity - active_count(tc)
 
 补充：教学班不存在 → `TeachingClassNotFound`。任一步失败都不新增记录、不减少名额。
 
+时段判断只有一个入口：`RegistrationService::registration_open_now()`。它按当前时间与 `opens_at`/`closes_at` 现算（两个比较条件），未设置时段时沿用 `registration_open`；`enroll()` 与 `drop()` 都调用它，所以时段结束后不需要任何额外刷新就会拒绝请求。
+
 ### 3.4 退课（Zhang Yuhua）
 
 `RegistrationService::drop(student_id, teaching_class_id)`：把 `Active` 改为 `Dropped`，

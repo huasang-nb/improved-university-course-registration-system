@@ -108,6 +108,7 @@ g++ -std=c++17 -Iheader_files `
 ## 四、与另外两位模块的接口
 
 - 选课与退课仍由 `RegistrationService::enroll` / `drop` 负责，检查顺序与名额计算未改动。
+- 选课时段只有一个判断入口 `RegistrationService::registration_open_now()`：按当前时间现算，时段结束后即使不刷新也会拒绝选课与退课（缺陷-001/003 的修复）；教学班仍有有效选课时不允许改 `course_id`（缺陷-002 的修复）。
 - 名单、人数、余量一律来自同一份有效 `Enrollment` 记录：`remaining_seats = capacity - active count`，
   不另存数字，因此教师端、学生端与管理员端不会出现不同人数。
 - 管理员对目录/规则的改动通过 `SystemContext` 写回 `RegistrationService`，选课记录保持不变。

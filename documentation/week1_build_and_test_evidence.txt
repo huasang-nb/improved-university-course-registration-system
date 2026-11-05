@@ -7,7 +7,7 @@ Team 4 选课系统 —— 第 0 周编译与测试证据（Zhu Ziliang）
 All registration tests passed
 
 ====== 测试 2：教师/管理员（Zhu Ziliang，含时段按请求现算）======
-PASS: 194 checks, 0 failure(s)
+PASS: 233 checks, 0 failure(s)
 
 ====== 命令行演示（含每周共同场景与 UC15 时段现算）======
 
@@ -67,12 +67,12 @@ PASS: 194 checks, 0 failure(s)
     -> [0] registration period set to 2026-11-02T08:00 -> 2026-11-13T18:00; registration is open now at 2026-11-03T10:00
      registration_open = true
 
-     the state is evaluated at request time, not cached at save time:
-     now = 2026-11-13T18:30, stored flag is still true
-     after refresh at the request: closed
+     defect-001: the window is checked on every request, no refresh call:
+     now = 2026-11-13T18:30, stored flag is still true, refresh_registration_window() not called
   Alice tries to enroll after the window closed
     -> [1] Registration period closed
-     now = 2026-11-04T09:00, after refresh: open
+  Alice tries again inside the window
+    -> [0] Enrollment successful
   Admin sets an inverted period
     -> [9] the registration period must start before it ends (2026-11-13T18:00 -> 2026-11-02T08:00)
   Admin closes registration
