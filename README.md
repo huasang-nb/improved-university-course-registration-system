@@ -131,3 +131,26 @@ python docs/task3/make_diagrams.py
 - 数据持久化尚未开始；当前每次运行由示例数据初始化。
 - 学分上限的数字只作为示例数据，URS 未规定具体值，不得写成甲方要求。
 - 教学班删除采用"仍有选课记录则拒绝"的策略，归档能力不在当前范围。
+
+## 七、学生查询模块（Zhang Yikai）
+
+| 用例 | 内容 | 主要入口 |
+|---|---|---|
+| UC02 Search / View Courses | 关键词按课程代码、课程名称、教师姓名匹配（大小写不敏感）；可按课程代码、学分、教师筛选；查看课程详情与教学班 | `StudentQueryService::search_courses` / `course_detail` |
+| UC03 View Available Seats | 某个教学班的容量、有效人数、剩余名额 | `StudentQueryService::view_available_seats` |
+| UC06 View Timetable | 学生本人课表，只含有效选课，按星期与开始时间排序 | `StudentQueryService::view_timetable` |
+
+此模块只读：不写 `Enrollment`，名额仍用 `capacity - active` 一个公式现算，课表由选课记录派生。
+UC10 / UC11 继续由 `TeacherService` 提供，不在这里重复实现。
+
+```powershell
+.\build\student_query_demonstration.exe
+```
+
+逐项说明见 `documentation/student_query_module.md`，周记录见 `weekly/2026-11-08.md`。
+
+## 八、Task 3 图与文档（Zhang Yikai）
+
+五张时序图（UC02、UC03、UC06、UC10、UC11）的可编辑 SVG、2 倍 PNG 与英文说明文档在
+`docs/task3/member_b/`，清单与改动说明见该目录的 `README.md`。图内术语统一用 `active`。
+

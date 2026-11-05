@@ -1,0 +1,81 @@
+<svg width="1820" height="1006" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="arr" markerWidth="10" markerHeight="8" refX="9" refY="3" orient="auto"><path d="M0,0 L9,3 L0,6 Z" fill="#333"/></marker>
+<marker id="arrRet" markerWidth="10" markerHeight="8" refX="9" refY="3" orient="auto"><path d="M0,0 L9,3 L0,6 Z" fill="#666"/></marker>
+</defs>
+<text x="910.0" y="34" text-anchor="middle" font-size="23" font-weight="bold" fill="#1a1a1a">Fig. B2 — UC03 View Available Seats</text>
+<text x="910.0" y="60" text-anchor="middle" font-size="14" fill="#666">Improved University Course Registration System  ·  Task 3 dynamic modelling  ·  Zhang Yikai (Member B)</text>
+<rect x="45.0" y="96" width="214" height="54" fill="#fff" stroke="#4a6fa5" stroke-width="1.6"/>
+<rect x="45.0" y="96" width="214" height="9" fill="#4a6fa5"/>
+<text x="152.0" y="134" text-anchor="middle" font-size="15" font-weight="bold" fill="#1f1f1f">Student</text>
+<line x1="152.0" y1="150" x2="152.0" y2="972" stroke="#b9b9b9" stroke-width="1" stroke-dasharray="7,6"/>
+<rect x="424.0" y="96" width="214" height="54" fill="#fff" stroke="#5b7fa8" stroke-width="1.6"/>
+<rect x="424.0" y="96" width="214" height="9" fill="#5b7fa8"/>
+<text x="531.0" y="134" text-anchor="middle" font-size="15" font-weight="bold" fill="#1f1f1f">Registration UI</text>
+<line x1="531.0" y1="150" x2="531.0" y2="972" stroke="#b9b9b9" stroke-width="1" stroke-dasharray="7,6"/>
+<rect x="803.0" y="96" width="214" height="54" fill="#fff" stroke="#2e7d5b" stroke-width="1.6"/>
+<rect x="803.0" y="96" width="214" height="9" fill="#2e7d5b"/>
+<text x="910.0" y="134" text-anchor="middle" font-size="15" font-weight="bold" fill="#1f1f1f">CatalogService</text>
+<line x1="910.0" y1="150" x2="910.0" y2="972" stroke="#b9b9b9" stroke-width="1" stroke-dasharray="7,6"/>
+<rect x="1182.0" y="96" width="214" height="54" fill="#fff" stroke="#8a6d3b" stroke-width="1.6"/>
+<rect x="1182.0" y="96" width="214" height="9" fill="#8a6d3b"/>
+<text x="1289.0" y="134" text-anchor="middle" font-size="15" font-weight="bold" fill="#1f1f1f">TeachingClass</text>
+<line x1="1289.0" y1="150" x2="1289.0" y2="972" stroke="#b9b9b9" stroke-width="1" stroke-dasharray="7,6"/>
+<rect x="1561.0" y="96" width="214" height="54" fill="#fff" stroke="#8a6d3b" stroke-width="1.6"/>
+<rect x="1561.0" y="96" width="214" height="9" fill="#8a6d3b"/>
+<text x="1668.0" y="134" text-anchor="middle" font-size="15" font-weight="bold" fill="#1f1f1f">SystemContext</text>
+<line x1="1668.0" y1="150" x2="1668.0" y2="972" stroke="#b9b9b9" stroke-width="1" stroke-dasharray="7,6"/>
+<rect x="56" y="392" width="1708" height="502" fill="none" stroke="#9a9a9a" stroke-width="1.2"/>
+<rect x="56" y="392" width="78" height="26" fill="#f0f0f0" stroke="#9a9a9a" stroke-width="1.2"/>
+<text x="95" y="410" text-anchor="middle" font-size="13" font-weight="bold" fill="#444">alt</text>
+<text x="144" y="410" font-size="13" fill="#333">[teaching class exists]</text>
+<line x1="56" y1="774" x2="1764" y2="774" stroke="#9a9a9a" stroke-width="1" stroke-dasharray="6,5"/>
+<text x="66" y="793" font-size="12.5" font-weight="bold" fill="#444">else</text>
+<text x="100" y="793" font-size="12.5" fill="#333">[unknown classId]</text>
+<line x1="152.0" y1="210" x2="531.0" y2="210" stroke="#333" stroke-width="1.4" marker-end="url(#arr)"/>
+<rect x="244.0" y="188" width="195.0" height="20" fill="#ffffff" fill-opacity="0.92"/>
+<text x="341.5" y="203" text-anchor="middle" font-size="13.5" fill="#333">select one teaching class</text>
+<line x1="531.0" y1="262" x2="910.0" y2="262" stroke="#333" stroke-width="1.4" marker-end="url(#arr)"/>
+<rect x="651.0" y="240" width="139.0" height="20" fill="#ffffff" fill-opacity="0.92"/>
+<text x="720.5" y="255" text-anchor="middle" font-size="13.5" fill="#333">getSeats(classId)</text>
+<line x1="910.0" y1="314" x2="1668.0" y2="314" stroke="#333" stroke-width="1.4" marker-end="url(#arr)"/>
+<rect x="1188.0" y="292" width="202.0" height="20" fill="#ffffff" fill-opacity="0.92"/>
+<text x="1289.0" y="307" text-anchor="middle" font-size="13.5" fill="#333">findTeachingClass(classId)</text>
+<line x1="1668.0" y1="366" x2="910.0" y2="366" stroke="#666" stroke-width="1.4" stroke-dasharray="7,5" marker-end="url(#arrRet)"/>
+<rect x="1184.5" y="344" width="209.0" height="20" fill="#ffffff" fill-opacity="0.92"/>
+<text x="1289.0" y="359" text-anchor="middle" font-size="13.5" fill="#666">TeachingClass, or not found</text>
+<line x1="910.0" y1="436" x2="1289.0" y2="436" stroke="#333" stroke-width="1.4" marker-end="url(#arr)"/>
+<rect x="1019.5" y="414" width="160.0" height="20" fill="#ffffff" fill-opacity="0.92"/>
+<text x="1099.5" y="429" text-anchor="middle" font-size="13.5" fill="#333">getCapacity(classId)</text>
+<line x1="1289.0" y1="488" x2="910.0" y2="488" stroke="#666" stroke-width="1.4" stroke-dasharray="7,5" marker-end="url(#arrRet)"/>
+<rect x="1061.5" y="466" width="76.0" height="20" fill="#ffffff" fill-opacity="0.92"/>
+<text x="1099.5" y="481" text-anchor="middle" font-size="13.5" fill="#666">capacity</text>
+<line x1="910.0" y1="540" x2="1668.0" y2="540" stroke="#333" stroke-width="1.4" marker-end="url(#arr)"/>
+<rect x="1170.5" y="518" width="237.0" height="20" fill="#ffffff" fill-opacity="0.92"/>
+<text x="1289.0" y="533" text-anchor="middle" font-size="13.5" fill="#333">countActiveEnrollments(classId)</text>
+<line x1="1668.0" y1="592" x2="910.0" y2="592" stroke="#666" stroke-width="1.4" stroke-dasharray="7,5" marker-end="url(#arrRet)"/>
+<rect x="1240.5" y="570" width="97.0" height="20" fill="#ffffff" fill-opacity="0.92"/>
+<text x="1289.0" y="585" text-anchor="middle" font-size="13.5" fill="#666">activeCount</text>
+<path d="M910.0 644 L962.0 644 L962.0 662 L914.0 662" fill="none" stroke="#333" stroke-width="1.4" marker-end="url(#arr)"/>
+<text x="970.0" y="650" font-size="13.5" fill="#333">remaining = capacity - activeCount</text>
+<line x1="910.0" y1="696" x2="531.0" y2="696" stroke="#666" stroke-width="1.4" stroke-dasharray="7,5" marker-end="url(#arrRet)"/>
+<rect x="598.5" y="674" width="244.0" height="20" fill="#ffffff" fill-opacity="0.92"/>
+<text x="720.5" y="689" text-anchor="middle" font-size="13.5" fill="#666">capacity, activeCount, remaining</text>
+<line x1="531.0" y1="748" x2="152.0" y2="748" stroke="#666" stroke-width="1.4" stroke-dasharray="7,5" marker-end="url(#arrRet)"/>
+<rect x="223.0" y="726" width="237.0" height="20" fill="#ffffff" fill-opacity="0.92"/>
+<text x="341.5" y="741" text-anchor="middle" font-size="13.5" fill="#666">seats shown; nothing is written</text>
+<line x1="910.0" y1="808" x2="531.0" y2="808" stroke="#666" stroke-width="1.4" stroke-dasharray="7,5" marker-end="url(#arrRet)"/>
+<rect x="661.5" y="786" width="118.0" height="20" fill="#ffffff" fill-opacity="0.92"/>
+<text x="720.5" y="801" text-anchor="middle" font-size="13.5" fill="#666">RecordNotFound</text>
+<line x1="531.0" y1="860" x2="152.0" y2="860" stroke="#666" stroke-width="1.4" stroke-dasharray="7,5" marker-end="url(#arrRet)"/>
+<rect x="237.0" y="838" width="209.0" height="20" fill="#ffffff" fill-opacity="0.92"/>
+<text x="341.5" y="853" text-anchor="middle" font-size="13.5" fill="#666">'Teaching class not found.'</text>
+<rect x="613.5999999999999" y="902" width="592.8000000000001" height="26" fill="#fffbea" stroke="#d8c48a" stroke-width="1"/>
+<text x="910.0" y="920" text-anchor="middle" font-size="13" fill="#6b5a1f">[ only records with status = active are counted; dropped records keep no seat ]</text>
+<line x1="70" y1="988" x2="130" y2="988" stroke="#333" stroke-width="1.4" marker-end="url(#arr)"/>
+<text x="138" y="992" font-size="12.5" fill="#555">call</text>
+<line x1="210" y1="988" x2="270" y2="988" stroke="#666" stroke-width="1.4" stroke-dasharray="7,5" marker-end="url(#arrRet)"/>
+<text x="278" y="992" font-size="12.5" fill="#555">return</text>
+<rect x="350" y="980" width="54" height="16" fill="none" stroke="#9a9a9a"/>
+<text x="412" y="992" font-size="12.5" fill="#555">alt / loop fragment (failure path in alt)</text>
+</svg>
