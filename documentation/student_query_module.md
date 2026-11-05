@@ -42,6 +42,14 @@
 4. **对别人的文件只做追加**：`CMakeLists.txt` 与 `build_and_test.ps1` 只在末尾加了两个目标、
    一个测试名，原有目标名与依赖没动。共享头文件一个字没改，所以不需要走
    `interface_change_request.md` 的破坏性改动流程。
+5. **"现在是否开放选课"不要读保存下来的布尔值**：本模块的三个用例（UC02 / UC03 / UC06）都不展示
+   选课状态，所以现在没有依赖这块数据。以后网页要显示，每次渲染时调用
+   `context.registration_window_open()`——它按当前时间现算，只有管理员没设起止时间时才回落到
+   `registration_open` 这个手动开关。不要直接读 `context.rule().registration_open`：那是保存值，
+   管理员设了 09:00–11:00 之后，12:00 它可能还是 `true`，页面会写着"开放中"，学生一点却被拒。
+   需要固定时刻做测试时用 `context.registration_window_open_at("2026-11-02T08:00")`。
+   `StudentQueryService` 持的是 `const SystemContext&`，这两个接口都是 `const`，以后要加一个
+   "当前是否开放"的只读字段也不用改构造函数。
 
 ## 四、行为细节
 
