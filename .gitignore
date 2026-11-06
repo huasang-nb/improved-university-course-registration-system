@@ -1,0 +1,14 @@
+# 编译产物
+build/
+*.exe
+*.o
+*.obj
+
+# 编辑器与本机配置
+.vs/
+.vscode/
+*.user
+
+# Python 缓存（生成图的脚本）
+__pycache__/
+*.pyc

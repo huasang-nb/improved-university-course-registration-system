@@ -1,0 +1,181 @@
+<mxfile host="app.diagrams.net" type="device">
+  <diagram id="Fig5 UC15 Set Registration Period" name="Fig5 UC15 Set Registration Period">
+    <mxGraphModel dx="1600" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="807" pageHeight="853" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="c0" value="Figure 5  UC15 Set Registration Period" style="text;html=0;whiteSpace=wrap;fontSize=15;fontStyle=1;fontColor=#1F2933;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="246.75" y="28.75" width="314" height="22.5" as="geometry"/>
+        </mxCell>
+        <mxCell id="c1" value="The administrator sets the opening and closing time; the open state is derived at request time, not cached" style="text;html=0;whiteSpace=wrap;fontSize=9.5;fontStyle=0;fontColor=#52606D;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="130.75" y="52.875" width="546" height="14.25" as="geometry"/>
+        </mxCell>
+        <mxCell id="c2" value="Administrator" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=0;fillColor=none;strokeColor=#1F2933;strokeWidth=1.3;fontSize=10;fontStyle=0;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="86.5" y="76" width="28" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="c3" value="" style="endArrow=none;html=0;dashed=1;strokeColor=#9AA5B1;strokeWidth=1;labelBackgroundColor=#FFFFFF;fontSize=9;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="100.5" y="138" as="sourcePoint"/>
+            <mxPoint x="100.5" y="829" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c4" value="" style="rounded=0;whiteSpace=wrap;html=0;fillColor=white;strokeColor=#9AA5B1;strokeWidth=0.9;fontSize=10;fontColor=#1F2933;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="96.5" y="825" width="8" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c5" value="AdminPage" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#EAF2FB;strokeColor=#4A7EBB;strokeWidth=1.3;fontSize=10.5;fontColor=#1F2933;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="185" y="65" width="96" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="c6" value="" style="endArrow=none;html=0;dashed=1;strokeColor=#9AA5B1;strokeWidth=1;labelBackgroundColor=#FFFFFF;fontSize=9;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="233" y="99" as="sourcePoint"/>
+            <mxPoint x="233" y="829" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c7" value="" style="rounded=0;whiteSpace=wrap;html=0;fillColor=white;strokeColor=#9AA5B1;strokeWidth=0.9;fontSize=10;fontColor=#1F2933;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="229" y="825" width="8" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c8" value="AdministratorService" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#EAF2FB;strokeColor=#4A7EBB;strokeWidth=1.3;fontSize=10.5;fontColor=#1F2933;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="315" y="65" width="136" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="c9" value="" style="endArrow=none;html=0;dashed=1;strokeColor=#9AA5B1;strokeWidth=1;labelBackgroundColor=#FFFFFF;fontSize=9;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="383" y="99" as="sourcePoint"/>
+            <mxPoint x="383" y="829" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c10" value="" style="rounded=0;whiteSpace=wrap;html=0;fillColor=white;strokeColor=#9AA5B1;strokeWidth=0.9;fontSize=10;fontColor=#1F2933;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="379" y="825" width="8" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c11" value="SystemContext" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#EAF2FB;strokeColor=#4A7EBB;strokeWidth=1.3;fontSize=10.5;fontColor=#1F2933;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="485" y="65" width="107" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="c12" value="" style="endArrow=none;html=0;dashed=1;strokeColor=#9AA5B1;strokeWidth=1;labelBackgroundColor=#FFFFFF;fontSize=9;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="538.5" y="99" as="sourcePoint"/>
+            <mxPoint x="538.5" y="829" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c13" value="" style="rounded=0;whiteSpace=wrap;html=0;fillColor=white;strokeColor=#9AA5B1;strokeWidth=0.9;fontSize=10;fontColor=#1F2933;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="534.5" y="825" width="8" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c14" value="RegistrationService" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#EAF2FB;strokeColor=#4A7EBB;strokeWidth=1.3;fontSize=10.5;fontColor=#1F2933;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="626" y="65" width="129" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="c15" value="" style="endArrow=none;html=0;dashed=1;strokeColor=#9AA5B1;strokeWidth=1;labelBackgroundColor=#FFFFFF;fontSize=9;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="690.5" y="99" as="sourcePoint"/>
+            <mxPoint x="690.5" y="829" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c16" value="" style="rounded=0;whiteSpace=wrap;html=0;fillColor=white;strokeColor=#9AA5B1;strokeWidth=0.9;fontSize=10;fontColor=#1F2933;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="686.5" y="825" width="8" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c17" value="set period 2026-11-02T08:00 - 2026-11-13T18:00" style="endArrow=block;endFill=1;html=0;dashed=0;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="100.5" y="172" as="sourcePoint"/>
+            <mxPoint x="233" y="172" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c18" value="setRegistrationPeriod(identity, open, close)" style="endArrow=block;endFill=1;html=0;dashed=0;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="233" y="218" as="sourcePoint"/>
+            <mxPoint x="383" y="218" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c19" value="" style="endArrow=block;endFill=1;html=0;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="388" y="256" as="sourcePoint"/>
+            <mxPoint x="388" y="276" as="targetPoint"/>
+            <Array as="points">
+            <mxPoint x="435" y="256"/>
+            <mxPoint x="435" y="276"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c20" value="canSetRegistrationPeriod(identity)" style="text;html=0;whiteSpace=wrap;fontSize=9;fontStyle=0;fontColor=#1F2933;align=left;verticalAlign=middle;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="443" y="259.25" width="176" height="13.5" as="geometry"/>
+        </mxCell>
+        <mxCell id="c21" value="" style="endArrow=block;endFill=1;html=0;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="388" y="314" as="sourcePoint"/>
+            <mxPoint x="388" y="334" as="targetPoint"/>
+            <Array as="points">
+            <mxPoint x="435" y="314"/>
+            <mxPoint x="435" y="334"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c22" value="validate both timestamps" style="text;html=0;whiteSpace=wrap;fontSize=9;fontStyle=0;fontColor=#1F2933;align=left;verticalAlign=middle;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="443" y="317.25" width="138" height="13.5" as="geometry"/>
+        </mxCell>
+        <mxCell id="c23" value="InvalidInput (malformed or open &gt;= close)" style="endArrow=open;endFill=0;html=0;dashed=1;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="383" y="380" as="sourcePoint"/>
+            <mxPoint x="233" y="380" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c24" value="show reason, previous rule kept" style="endArrow=open;endFill=0;html=0;dashed=0;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="233" y="426" as="sourcePoint"/>
+            <mxPoint x="100.5" y="426" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c25" value="applyRuleChange(opens_at, closes_at)" style="endArrow=block;endFill=1;html=0;dashed=0;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="383" y="472" as="sourcePoint"/>
+            <mxPoint x="538.5" y="472" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c26" value="applyRuleChange(rule)" style="endArrow=block;endFill=1;html=0;dashed=0;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="538.5" y="518" as="sourcePoint"/>
+            <mxPoint x="690.5" y="518" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c27" value="registrationWindowOpen(now)" style="endArrow=block;endFill=1;html=0;dashed=0;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="383" y="564" as="sourcePoint"/>
+            <mxPoint x="538.5" y="564" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c28" value="" style="endArrow=block;endFill=1;html=0;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="543.5" y="669" as="sourcePoint"/>
+            <mxPoint x="543.5" y="689" as="targetPoint"/>
+            <Array as="points">
+            <mxPoint x="590.5" y="669"/>
+            <mxPoint x="590.5" y="689"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c29" value="now &gt;= opens_at and now &lt; closes_at" style="text;html=0;whiteSpace=wrap;fontSize=9;fontStyle=0;fontColor=#1F2933;align=left;verticalAlign=middle;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="598.5" y="672.25" width="201" height="13.5" as="geometry"/>
+        </mxCell>
+        <mxCell id="c30" value="Success(open at now = true)" style="endArrow=open;endFill=0;html=0;dashed=1;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="383" y="735" as="sourcePoint"/>
+            <mxPoint x="233" y="735" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c31" value="show period and current state" style="endArrow=open;endFill=0;html=0;dashed=0;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="233" y="781" as="sourcePoint"/>
+            <mxPoint x="100.5" y="781" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c32" value="alt&#10;[malformed timestamp or start &gt;= end]" style="shape=umlFrame;whiteSpace=wrap;html=0;width=110;height=26;fillColor=none;strokeColor=#1F2933;fontSize=9;fontStyle=1;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="74.5" y="342" width="642" height="461" as="geometry"/>
+        </mxCell>
+        <mxCell id="c33" value="[valid period]" style="endArrow=none;html=0;dashed=1;strokeColor=#1F2933;labelBackgroundColor=#FFFFFF;fontSize=9;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="74.5" y="450" as="sourcePoint"/>
+            <mxPoint x="716.5" y="450" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c34" value="the state is evaluated from the stored times on every enroll / drop request, so it cannot go stale" style="shape=note;whiteSpace=wrap;html=0;size=12;fillColor=#FFFDE7;strokeColor=#C9A227;align=left;verticalAlign=middle;fontSize=9;fontFamily=Microsoft YaHei;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="114.5" y="582" width="178" height="51" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
