@@ -55,18 +55,40 @@ bool StudentQueryService::course_matches(
     if (filter.credits >= 0 && course.credits != filter.credits) {
         return false;
     }
-    if (filter.teacher_id >= 0 &&
-        !any_teaching_class_matches(course, filter.teacher_id)) {
+    // 关键词命中课程代码或课程名称，说明这门课本身就对得上。
+    const bool course_level_match =
+        contains_text(to_lower(course.course_code), lowered_keyword) ||
+        contains_text(to_lower(course.course_name), lowered_keyword);
+
+    // 没指定教师：课程级命中就算过，否则再看有没有哪位老师的名字带关键词。
+    if (filter.teacher_id < 0) {
+        if (course_level_match) {
+            return true;
+        }
+        for (const TeachingClass& teaching_class : context_.teaching_classes()) {
+            if (teaching_class.course_id != course.course_id) {
+                continue;
+            }
+            const Teacher* teacher = context_.find_teacher(teaching_class.teacher_id);
+            if (teacher != nullptr &&
+                contains_text(to_lower(teacher->name), lowered_keyword)) {
+                return true;
+            }
+        }
         return false;
     }
 
-    // 关键词在三处找：课程代码、课程名称、教师姓名。
-    if (contains_text(to_lower(course.course_code), lowered_keyword) ||
-        contains_text(to_lower(course.course_name), lowered_keyword)) {
-        return true;
+    // 指定了教师：课程级命中时，只要这门课确实有这位老师的班就行。
+    if (course_level_match) {
+        return any_teaching_class_matches(course, filter.teacher_id);
     }
+
+    // 关键词只能靠老师名字命中时，关键词和筛选必须落在同一个教学班。
+    // 否则搜 "Wang" 又筛 Zhao，会拿 Wang 的班凑关键词、拿 Zhao 的班凑筛选，
+    // 返回一堆学生根本没在找的班。
     for (const TeachingClass& teaching_class : context_.teaching_classes()) {
-        if (teaching_class.course_id != course.course_id) {
+        if (teaching_class.course_id != course.course_id ||
+            teaching_class.teacher_id != filter.teacher_id) {
             continue;
         }
         const Teacher* teacher = context_.find_teacher(teaching_class.teacher_id);

@@ -171,5 +171,44 @@ int main() {
            ResultCode::PermissionDenied);
     assert(timetable.empty());
 
+    // 10. 关键词和教师筛选必须是同一个教学班，不能一个班凑关键词、另一个班凑筛选。
+    //     SE101 下面有 Wang（教学班 10）和 Zhao（教学班 11）两个班。
+    CourseSearchFilter wang_with_zhao;
+    wang_with_zhao.teacher_id = 300;
+    assert(query.search_courses("wang", wang_with_zhao, found).code ==
+           ResultCode::Success);
+    assert(found.empty());  // 没有哪个班既是 Wang 又被筛成 Zhao
+
+    // 同一个老师：关键词和筛选落在同一个班上，正常返回一个班。
+    CourseSearchFilter wang_with_wang;
+    wang_with_wang.teacher_id = 100;
+    assert(query.search_courses("wang", wang_with_wang, found).code ==
+           ResultCode::Success);
+    assert(found.size() == 1);
+    assert(found[0].course.course_code == "SE101");
+    assert(found[0].teaching_classes.size() == 1);
+    assert(found[0].teaching_classes[0].teacher_id == 100);
+
+    // 课程名称命中关键词时，教师筛选只负责把教学班收窄，这门课仍然留着。
+    CourseSearchFilter name_with_zhao;
+    name_with_zhao.teacher_id = 300;
+    assert(query.search_courses("software", name_with_zhao, found).code ==
+           ResultCode::Success);
+    assert(found.size() == 1);
+    assert(found[0].course.course_code == "SE101");
+    assert(found[0].teaching_classes.size() == 1);
+    assert(found[0].teaching_classes[0].teacher_name == "Dr. Zhao");
+
+    // 空关键词 + 教师筛选：就是这位老师开的课，每门课只留他一个班。
+    CourseSearchFilter only_zhao;
+    only_zhao.teacher_id = 300;
+    assert(query.search_courses("", only_zhao, found).code ==
+           ResultCode::Success);
+    assert(found.size() == 2);
+    for (const CourseView& view : found) {
+        assert(view.teaching_classes.size() == 1);
+        assert(view.teaching_classes[0].teacher_id == 300);
+    }
+
     std::cout << "All student query and timetable tests passed\n";
 }

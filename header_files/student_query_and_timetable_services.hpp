@@ -23,6 +23,10 @@
 namespace course_registration {
 
 // 课程搜索的筛选条件。字符串留空、整数留 -1 表示这一项不参与筛选。
+//
+// 关键词和 teacher_id 同时给的时候，两者要由**同一个教学班**同时满足：
+// 搜 "Wang" 再筛 Zhao，不会返回 Zhao 的班。课程代码或名称本身命中关键词时，
+// 只要这门课确实有这位老师的班就算命中，返回的教学班仍只留这位老师的。
 struct CourseSearchFilter {
     std::string course_code{};
     int credits{-1};
@@ -78,6 +82,8 @@ public:
 
     // UC02 搜索。关键词按课程代码、课程名称、教师姓名三处做不区分大小写的
     // 包含匹配；没有匹配时返回 Success + 空列表，由界面给出“没有匹配课程”。
+    // 关键词靠教师姓名命中时，只算命中那一位老师的教学班；再叠教师筛选，
+    // 两者必须是同一个班，不同班的组合不会返回。
     OperationResult search_courses(const std::string& keyword,
                                    const CourseSearchFilter& filter,
                                    std::vector<CourseView>& result) const;
