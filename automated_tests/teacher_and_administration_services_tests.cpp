@@ -106,10 +106,10 @@ struct Fixture {
     UserIdentity dr_li;
     UserIdentity dr_zhao;
 
-    Fixture()
+    // 可以指定初始规则：缺陷-010 需要"本轮尚未开放"的起点。
+    explicit Fixture(RegistrationRule rule = RegistrationRule{true, 18, "", ""})
         : context(make_students(), make_teachers(), make_administrators(),
-                  make_courses(), make_teaching_classes(),
-                  RegistrationRule{true, 18, "", ""}),
+                  make_courses(), make_teaching_classes(), rule),
           admin{900, "A2020001", Role::Administrator},
           alice{1001, "S2023001", Role::Student},
           bob{1002, "S2023002", Role::Student},
@@ -470,15 +470,16 @@ void test_uc15_registration_window() {
                ResultCode::Success);
     CHECK(!fixture.context.rule().registration_open);
 
-    // 学分上限可配置，但必须是正数；教师无权修改。
+    // 学分上限必须是正数、教师无权修改；本轮已开放过，因此这里应当被拒绝
+    // （允许修改的情形见缺陷-010 的测试）。
     CHECK_CODE(administration.set_maximum_credits(fixture.admin, 12),
-               ResultCode::Success);
-    CHECK(fixture.context.rule().maximum_credits == 12);
+               ResultCode::InvalidInput);
+    CHECK(fixture.context.rule().maximum_credits == 18);
     CHECK_CODE(administration.set_maximum_credits(fixture.admin, 0),
                ResultCode::InvalidInput);
     CHECK_CODE(administration.set_maximum_credits(fixture.dr_wang, 20),
                ResultCode::PermissionDenied);
-    CHECK(fixture.context.rule().maximum_credits == 12);
+    CHECK(fixture.context.rule().maximum_credits == 18);
 }
 
 // 时段状态按请求时刻现算：保存后时间继续走，状态不会停在旧值。
@@ -647,6 +648,186 @@ void test_defect_003_manual_close_survives_refresh() {
     CHECK(fixture.context.rule().registration_open);
     CHECK_CODE(fixture.context.registration().enroll(1001, 10),
                ResultCode::Success);
+}
+
+// 缺陷-006 复现：删除学生/教师后，提示必须用被删除那条记录的编号。
+void test_defect_006_delete_message_uses_deleted_record() {
+    Fixture fixture;
+    AdministratorService administration(fixture.context);
+
+    // 学生：首条、中间、末条（删到最后一条即"唯一记录"）
+    const OperationResult first =
+        administration.remove_student(fixture.admin, 1001);
+    CHECK_CODE(first, ResultCode::Success);
+    CHECK_MESSAGE(first, "S2023001");
+    CHECK(first.message.find("S2023002") == std::string::npos);
+
+    const OperationResult middle =
+        administration.remove_student(fixture.admin, 1002);
+    CHECK_CODE(middle, ResultCode::Success);
+    CHECK_MESSAGE(middle, "S2023002");
+    CHECK(middle.message.find("S2023003") == std::string::npos);
+
+    const OperationResult last =
+        administration.remove_student(fixture.admin, 1003);
+    CHECK_CODE(last, ResultCode::Success);
+    CHECK_MESSAGE(last, "S2023003");
+    CHECK(fixture.context.students().empty());
+
+    // 已删除的编号再删一次：RecordNotFound，提示里只有这个编号
+    const OperationResult gone =
+        administration.remove_student(fixture.admin, 1003);
+    CHECK_CODE(gone, ResultCode::RecordNotFound);
+    CHECK_MESSAGE(gone, "1003");
+
+    // 教师：先删掉没有选课记录的教学班，再按首条、中间、末条删除
+    for (int class_id : {10, 11, 20, 30}) {
+        CHECK_CODE(
+            administration.remove_teaching_class(fixture.admin, class_id),
+            ResultCode::Success);
+    }
+    const OperationResult teacher_first =
+        administration.remove_teacher(fixture.admin, 100);
+    CHECK_CODE(teacher_first, ResultCode::Success);
+    CHECK_MESSAGE(teacher_first, "T2015007");
+    CHECK(teacher_first.message.find("T2016011") == std::string::npos);
+
+    const OperationResult teacher_middle =
+        administration.remove_teacher(fixture.admin, 200);
+    CHECK_CODE(teacher_middle, ResultCode::Success);
+    CHECK_MESSAGE(teacher_middle, "T2016011");
+
+    const OperationResult teacher_last =
+        administration.remove_teacher(fixture.admin, 300);
+    CHECK_CODE(teacher_last, ResultCode::Success);
+    CHECK_MESSAGE(teacher_last, "T2018003");
+    CHECK(fixture.context.teachers().empty());
+}
+
+// 缺陷-007 复现：查询失败后，输出里不能残留上一次成功的班级。
+void test_defect_007_failed_query_clears_output() {
+    Fixture fixture;
+    TeacherService teacher_service(fixture.context);
+
+    TeachingClassSummary summary{};
+    CHECK_CODE(teacher_service.class_summary(fixture.dr_wang, 10, summary),
+               ResultCode::Success);
+    CHECK(summary.teaching_class_id == 10);
+    CHECK(summary.course_code == "SE101");
+
+    // 成功之后越权读取：PermissionDenied，且输出被清空
+    const OperationResult denied_result =
+        teacher_service.class_summary(fixture.dr_wang, 11, summary);
+    CHECK_CODE(denied_result, ResultCode::PermissionDenied);
+    CHECK(summary.teaching_class_id == 0);
+    CHECK(summary.course_code.empty());
+    CHECK(summary.capacity == 0);
+
+    // 成功之后查询不存在的编号：同样清空
+    CHECK_CODE(teacher_service.class_summary(fixture.dr_wang, 10, summary),
+               ResultCode::Success);
+    const OperationResult missing =
+        teacher_service.class_summary(fixture.dr_wang, 999, summary);
+    CHECK_CODE(missing, ResultCode::TeachingClassNotFound);
+    CHECK(summary.teaching_class_id == 0);
+    CHECK(summary.course_code.empty());
+}
+
+// 缺陷-009 复现：不存在的日期（2 月 30 日、非闰年 2 月 29 日、4 月 31 日）必须被拒绝。
+void test_defect_009_rejects_impossible_dates() {
+    Fixture fixture;
+    AdministratorService administration(fixture.context);
+    fixture.context.set_now_for_tests("2026-11-03T10:00");
+
+    // 合法闰日 2024-02-29 可以保存
+    CHECK_CODE(administration.set_registration_period(
+                   fixture.admin, "2024-02-29T08:00", "2024-03-01T18:00"),
+               ResultCode::Success);
+    CHECK(fixture.context.rule().opens_at == "2024-02-29T08:00");
+
+    // 先把规则设成一个合法时段，作为"原规则"
+    CHECK_CODE(administration.set_registration_period(
+                   fixture.admin, "2026-11-02T08:00", "2026-11-13T18:00"),
+               ResultCode::Success);
+    const RegistrationRule kept = fixture.context.rule();
+
+    // 逐个非法日期：返回 InvalidInput，且原规则完全不变
+    const char* const bad_openings[] = {
+        "2026-02-29T08:00",  // 非闰年没有 2 月 29 日
+        "2026-02-30T08:00",  // 2 月没有 30 日
+        "2026-04-31T08:00",  // 4 月只有 30 天
+        "2026-13-01T08:00",  // 月份越界
+        "2026-00-10T08:00",  // 月份为 0
+    };
+    for (const char* bad : bad_openings) {
+        const OperationResult rejected =
+            administration.set_registration_period(fixture.admin, bad,
+                                                   "2026-12-31T18:00");
+        CHECK_CODE(rejected, ResultCode::InvalidInput);
+        CHECK(fixture.context.rule().opens_at == kept.opens_at);
+        CHECK(fixture.context.rule().closes_at == kept.closes_at);
+    }
+
+    // 4 月 30 日是合法的
+    const OperationResult april_thirtieth =
+        administration.set_registration_period(fixture.admin,
+                                               "2026-04-30T08:00",
+                                               "2026-05-10T18:00");
+    CHECK_CODE(april_thirtieth, ResultCode::Success);
+    CHECK(fixture.context.rule().opens_at == "2026-04-30T08:00");
+}
+
+// 缺陷-010 复现：学分上限必须在本轮开放前确定，开放过就不能再改。
+void test_defect_010_credit_limit_locked_after_open() {
+    // 起点：本轮尚未开放
+    Fixture fixture(RegistrationRule{false, 18, "", ""});
+    AdministratorService administration(fixture.context);
+    fixture.context.set_now_for_tests("2026-11-03T10:00");
+
+    // 1. 尚未开放：允许设置与修改
+    CHECK_CODE(administration.set_maximum_credits(fixture.admin, 20),
+               ResultCode::Success);
+    CHECK(fixture.context.rule().maximum_credits == 20);
+    CHECK_CODE(administration.set_maximum_credits(fixture.admin, 18),
+               ResultCode::Success);
+    CHECK(fixture.context.rule().maximum_credits == 18);
+
+    // 2. 开放本轮
+    CHECK_CODE(administration.set_registration_period(
+                   fixture.admin, "2026-11-03T09:00", "2026-11-03T11:00"),
+               ResultCode::Success);
+    CHECK(fixture.context.rule().registration_open);
+
+    // 3. 开放之后不允许修改，原上限不变
+    const OperationResult after_open =
+        administration.set_maximum_credits(fixture.admin, 12);
+    CHECK_CODE(after_open, ResultCode::InvalidInput);
+    CHECK_MESSAGE(after_open, "still 18");
+    CHECK(fixture.context.rule().maximum_credits == 18);
+
+    // 4. 暂停之后仍然不允许（不能用"先关闭、改上限、再开放"绕过）
+    CHECK_CODE(administration.close_registration(fixture.admin),
+               ResultCode::Success);
+    CHECK_CODE(administration.set_maximum_credits(fixture.admin, 12),
+               ResultCode::InvalidInput);
+    CHECK(fixture.context.rule().maximum_credits == 18);
+
+    // 5. 本轮结束之后仍然不允许
+    CHECK_CODE(administration.set_registration_period(
+                   fixture.admin, "2026-11-03T09:00", "2026-11-03T11:00"),
+               ResultCode::Success);
+    fixture.context.set_now_for_tests("2026-11-03T12:00");
+    // 现算结果是"已关闭"；保存的 registration_open 只是显示用，可能还是旧值。
+    CHECK(!fixture.context.registration_window_open());
+    CHECK_CODE(administration.set_maximum_credits(fixture.admin, 12),
+               ResultCode::InvalidInput);
+    CHECK(fixture.context.rule().maximum_credits == 18);
+
+    // 6. 原有的权限与正数校验仍然生效
+    CHECK_CODE(administration.set_maximum_credits(fixture.dr_wang, 20),
+               ResultCode::PermissionDenied);
+    CHECK_CODE(administration.set_maximum_credits(fixture.admin, 0),
+               ResultCode::InvalidInput);
 }
 
 // ---------------------------------------------------------------------------
@@ -871,6 +1052,10 @@ int main() {
     test_defect_001_enroll_after_window_closed();
     test_defect_002_course_change_blocked_while_enrolled();
     test_defect_003_manual_close_survives_refresh();
+    test_defect_006_delete_message_uses_deleted_record();
+    test_defect_007_failed_query_clears_output();
+    test_defect_009_rejects_impossible_dates();
+    test_defect_010_credit_limit_locked_after_open();
     test_uc16_student_records();
     test_uc16_teacher_records();
     test_data_integrity_check();
