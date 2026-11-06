@@ -37,6 +37,23 @@ int number_at(const std::string& text, std::size_t begin, std::size_t end) {
     return value;
 }
 
+// 公历闰年：能被 4 整除且不能被 100 整除，或能被 400 整除。
+bool is_leap_year(int year) {
+    return (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+}
+
+int days_in_month(int year, int month) {
+    static const int kDays[] = {31, 28, 31, 30, 31, 30,
+                                31, 31, 30, 31, 30, 31};
+    if (month < 1 || month > 12) {
+        return 0;
+    }
+    if (month == 2 && is_leap_year(year)) {
+        return 29;
+    }
+    return kDays[month - 1];
+}
+
 // "YYYY-MM-DDTHH:MM"：固定宽度，因此可以直接用字符串比较先后顺序。
 bool is_valid_iso_minute(const std::string& text) {
     if (text.size() != 16) {
@@ -50,12 +67,18 @@ bool is_valid_iso_minute(const std::string& text) {
         !all_digits(text, 14, 16)) {
         return false;
     }
+    const int year = number_at(text, 0, 4);
     const int month = number_at(text, 5, 7);
     const int day = number_at(text, 8, 10);
     const int hour = number_at(text, 11, 13);
     const int minute = number_at(text, 14, 16);
-    return month >= 1 && month <= 12 && day >= 1 && day <= 31 &&
-           hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59;
+    if (month < 1 || month > 12 || hour < 0 || hour > 23 ||
+        minute < 0 || minute > 59) {
+        return false;
+    }
+    // 缺陷-009 修复：按月份天数与闰年判断，
+    // 避免 2026-02-30、2026-02-29（非闰年）或 2026-04-31 这类日期通过。
+    return day >= 1 && day <= days_in_month(year, month);
 }
 
 bool is_blank(const std::string& text) {
@@ -418,6 +441,23 @@ void SystemContext::refresh_registration_window() {
     registration_.apply_rule_change(current);
 }
 
+bool SystemContext::observe_registration_round() {
+    if (round_opened_) {
+        return true;
+    }
+    const RegistrationRule rule = registration_.registration_rule();
+    // 1. 现在就开放：时段覆盖当前时间，或未设时段但手动开关为 true。
+    if (registration_.registration_open_now()) {
+        round_opened_ = true;
+    }
+    // 2. 时段的开始时刻已经过去：即使现在已关闭、已结束，也算"本轮开放过"。
+    if (!rule.opens_at.empty() && !rule.closes_at.empty() &&
+        now() >= rule.opens_at) {
+        round_opened_ = true;
+    }
+    return round_opened_;
+}
+
 // ===========================================================================
 // TeacherService
 // ===========================================================================
@@ -492,6 +532,9 @@ OperationResult TeacherService::class_summary(
     const UserIdentity& user,
     int teaching_class_id,
     TeachingClassSummary& result) const {
+    // 缺陷-007 修复：入口先清空输出，失败时不会残留上一次查询的班级。
+    // 调用方仍然必须检查返回码。
+    result = TeachingClassSummary{};
     TeachingClass teaching_class{};
     if (!context_.find_teaching_class(teaching_class_id, teaching_class)) {
         return {ResultCode::TeachingClassNotFound,
@@ -954,11 +997,18 @@ OperationResult AdministratorService::set_registration_period(
                     opens_at + " -> " + closes_at + ")"};
     }
 
+    // 缺陷-010 修复（第二次）：必须在覆盖旧时段之前，先用**旧规则**记录
+    // "本轮是否已经开放过"。提前预约的时段会按时间自动开放，如果先写入新时段
+    // 再观察，旧时段已经被覆盖，就看不出本轮开放过，从而可以改学分上限。
+    context_.observe_registration_round();
+
     RegistrationRule rule = context_.rule();
     rule.opens_at = opens_at;
     rule.closes_at = closes_at;
     context_.apply_rule_change(rule);
     context_.refresh_registration_window();
+    // 新时段也可能立即开放（例如把时段设成当前正在进行的区间），同样要记录。
+    context_.observe_registration_round();
 
     const RegistrationRule applied = context_.rule();
     return {ResultCode::Success,
@@ -976,6 +1026,16 @@ OperationResult AdministratorService::set_maximum_credits(
     if (maximum_credits <= 0) {
         return {ResultCode::InvalidInput, "maximum_credits must be positive"};
     }
+    // 缺陷-010 修复：学分上限必须在本轮选课开放前确定。
+    // 只要本轮开放过（含暂停、已结束），就不再允许修改；
+    // 仅有"当前是否开放"的判断会被"先关闭、改上限、再开放"绕过。
+    if (context_.observe_registration_round()) {
+        return {ResultCode::InvalidInput,
+                "maximum credits must be fixed before this round of "
+                "registration opens; the limit is still " +
+                    std::to_string(context_.rule().maximum_credits) +
+                    " and cannot be changed now"};
+    }
     RegistrationRule rule = context_.rule();
     rule.maximum_credits = maximum_credits;
     context_.apply_rule_change(rule);
@@ -988,6 +1048,9 @@ OperationResult AdministratorService::close_registration(
     if (!PermissionRules::can_set_registration_period(user)) {
         return denied("closing the registration period");
     }
+    // 缺陷-010：关闭前先记下"本轮已经开放过"，否则清空时段后
+    // 这个事实会丢失，"关闭→改上限→再开放"就能绕过限制。
+    context_.observe_registration_round();
     // 清空起止时间：手动关闭作为覆盖状态，避免下一次按请求时刻现算时
     // 又被已经设好的时段重新打开。要恢复开放，管理员重新设置时段。
     RegistrationRule rule = context_.rule();
@@ -1066,17 +1129,19 @@ OperationResult AdministratorService::remove_student(const UserIdentity& user,
         return {ResultCode::RecordNotFound,
                 "student_id " + std::to_string(student_id) + " not found"};
     }
+    // 缺陷-006 修复：先复制学号。删除会 erase 掉 vector 元素，
+    // 之后 existing 是悬空指针，读出来可能是另一个学生的编号。
+    const std::string student_number = existing->student_number;
     const int active = static_cast<int>(
         context_.active_enrollments(student_id).size());
     if (active > 0) {
         return {ResultCode::CatalogInUse,
-                "student " + existing->student_number + " still has " +
+                "student " + student_number + " still has " +
                     std::to_string(active) +
                     " active enrollment(s); drop them first"};
     }
     context_.remove_student_record(student_id);
-    return {ResultCode::Success,
-            "student " + existing->student_number + " removed"};
+    return {ResultCode::Success, "student " + student_number + " removed"};
 }
 
 OperationResult AdministratorService::create_teacher(
@@ -1145,6 +1210,8 @@ OperationResult AdministratorService::remove_teacher(const UserIdentity& user,
         return {ResultCode::RecordNotFound,
                 "teacher_id " + std::to_string(teacher_id) + " not found"};
     }
+    // 缺陷-006 修复：先复制工号，删除后不再通过 existing 指针读取。
+    const std::string teacher_number = existing->teacher_number;
     int assigned = 0;
     for (const TeachingClass& teaching_class : context_.teaching_classes()) {
         if (teaching_class.teacher_id == teacher_id) {
@@ -1153,13 +1220,12 @@ OperationResult AdministratorService::remove_teacher(const UserIdentity& user,
     }
     if (assigned > 0) {
         return {ResultCode::CatalogInUse,
-                "teacher " + existing->teacher_number + " still teaches " +
+                "teacher " + teacher_number + " still teaches " +
                     std::to_string(assigned) +
                     " teaching class(es); reassign them first"};
     }
     context_.remove_teacher_record(teacher_id);
-    return {ResultCode::Success,
-            "teacher " + existing->teacher_number + " removed"};
+    return {ResultCode::Success, "teacher " + teacher_number + " removed"};
 }
 
 OperationResult AdministratorService::check_data_integrity(

@@ -571,6 +571,12 @@ class SequenceDiagram:
         width = cursor - 34 + self.PAD
         header_y = self.TOP
 
+        # 副标题过长时按画布宽度折行，并把参与者整体下移，避免压住标题。
+        subtitle_lines = []
+        if self.subtitle:
+            subtitle_lines = wrap_text(self.subtitle, 9.5, width - 60)
+            header_y = self.TOP + (len(subtitle_lines) - 1) * 14
+
         # 画布右侧要容纳自调用的标签与靠右的注释
         extra_right = 0
         for message in self.messages:
@@ -608,8 +614,9 @@ class SequenceDiagram:
 
         canvas = Canvas(width, height)
         canvas.text(width / 2, 16, self.title, size=15, bold=True)
-        if self.subtitle:
-            canvas.text(width / 2, 36, self.subtitle, size=9.5, color=MUTED)
+        for index, line in enumerate(subtitle_lines):
+            canvas.text(width / 2, 36 + index * 14, line, size=9.5,
+                        color=MUTED)
 
         # 参与者框 / 小人
         for index, part in enumerate(self.parts):

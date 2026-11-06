@@ -7,7 +7,7 @@ Team 4 选课系统 —— 第 0 周编译与测试证据（Zhu Ziliang）
 All registration tests passed
 
 ====== 测试 2：教师/管理员（Zhu Ziliang，含时段按请求现算）======
-PASS: 233 checks, 0 failure(s)
+PASS: 326 checks, 0 failure(s)
 
 ====== 命令行演示（含每周共同场景与 UC15 时段现算）======
 

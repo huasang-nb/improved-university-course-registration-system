@@ -175,16 +175,20 @@ public:
     std::string now() const;
     void set_now_for_tests(const std::string& iso_minute);
 
-    // 时段是否开放：按给定时刻与已设置的 opens_at / closes_at 现算，
-    // 不在管理员保存时缓存结果，避免时间走过去以后状态仍是旧值。
+    // 时段是否开放：按给定时刻与已设置的 opens_at / closes_at 现算。
     // 未设置起止时间时，沿用管理员的手动开关。
     bool registration_window_open_at(const std::string& moment) const;
     bool registration_window_open() const;
 
-    // 把现算结果写回 RegistrationService，供 enroll()/drop() 读取。
-    // 每次选课或退课请求前调用一次；调用位置（集成层或 enroll() 入口）
-    // 待三人确认，见 documentation/interface_change_request.md。
+    // 缺陷-008 修复后的说明：选课与退课自己按当前时间判断
+    // （RegistrationService::registration_open_now()），所以本函数**不是**请求的前置条件。
+    // 它只把现算结果同步到 registration_open，供页面/演示显示当前状态；
+    // 页面要"现在是否开放"时用 registration_window_open()。
     void refresh_registration_window();
+
+    // 缺陷-010：记录并返回"本轮是否已经开放过"（含已暂停、已结束）。
+    // 一旦为 true 就保持 true，用于锁住学分上限，避免"先关闭、改上限、再开放"绕过限制。
+    bool observe_registration_round();
 
 private:
     std::vector<Student> students_;
@@ -192,6 +196,7 @@ private:
     std::vector<Administrator> administrators_;
     RegistrationService registration_;
     std::string fixed_now_;  // 空表示使用系统时间
+    bool round_opened_ = false;  // 本轮已开放过（观察到的历史事实，不清零）
 };
 
 // ---------------------------------------------------------------------------

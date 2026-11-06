@@ -1,14 +1,14 @@
 <mxfile host="app.diagrams.net" type="device">
   <diagram id="Fig6 UC16 Manage Student / Teacher Information" name="Fig6 UC16 Manage Student / Teacher Information">
-    <mxGraphModel dx="1600" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="674" pageHeight="874" math="0" shadow="0">
+    <mxGraphModel dx="1600" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="685" pageHeight="874" math="0" shadow="0">
       <root>
         <mxCell id="0"/>
         <mxCell id="1" parent="0"/>
         <mxCell id="c0" value="Figure 6  UC16 Manage Student / Teacher Information" style="text;html=0;whiteSpace=wrap;fontSize=15;fontStyle=1;fontColor=#1F2933;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
-          <mxGeometry x="118.008" y="28.75" width="437.984" height="22.5" as="geometry"/>
+          <mxGeometry x="123.508" y="28.75" width="437.984" height="22.5" as="geometry"/>
         </mxCell>
         <mxCell id="c1" value="Administrator creates a student account; duplicate identifiers and blank fields are rejected" style="text;html=0;whiteSpace=wrap;fontSize=9.5;fontStyle=0;fontColor=#52606D;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
-          <mxGeometry x="102.5" y="52.875" width="469" height="14.25" as="geometry"/>
+          <mxGeometry x="108" y="52.875" width="469" height="14.25" as="geometry"/>
         </mxCell>
         <mxCell id="c2" value="Administrator" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=0;fillColor=none;strokeColor=#1F2933;strokeWidth=1.3;fontSize=10;fontStyle=0;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
           <mxGeometry x="86.5" y="76" width="28" height="44" as="geometry"/>
@@ -89,7 +89,7 @@
             <mxPoint x="538.5" y="376" as="targetPoint"/>
           </mxGeometry>
         </mxCell>
-        <mxCell id="c19" value="not found" style="endArrow=open;endFill=0;html=0;dashed=1;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+        <mxCell id="c19" value="found or not found" style="endArrow=open;endFill=0;html=0;dashed=1;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
           <mxGeometry relative="1" as="geometry">
             <mxPoint x="538.5" y="422" as="sourcePoint"/>
             <mxPoint x="383" y="422" as="targetPoint"/>
@@ -101,7 +101,7 @@
             <mxPoint x="538.5" y="468" as="targetPoint"/>
           </mxGeometry>
         </mxCell>
-        <mxCell id="c21" value="not found" style="endArrow=open;endFill=0;html=0;dashed=1;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
+        <mxCell id="c21" value="found or not found" style="endArrow=open;endFill=0;html=0;dashed=1;strokeColor=#1F2933;strokeWidth=1.2;labelBackgroundColor=#FFFFFF;fontSize=9.2;fontFamily=Microsoft YaHei;" edge="1" parent="1">
           <mxGeometry relative="1" as="geometry">
             <mxPoint x="538.5" y="514" as="sourcePoint"/>
             <mxPoint x="383" y="514" as="targetPoint"/>
@@ -159,8 +159,8 @@
             <mxPoint x="564.5" y="688" as="targetPoint"/>
           </mxGeometry>
         </mxCell>
-        <mxCell id="c31" value="the same flow serves teachers: createTeacher / updateTeacher / removeTeacher" style="shape=note;whiteSpace=wrap;html=0;size=12;fillColor=#FFFDE7;strokeColor=#C9A227;align=left;verticalAlign=middle;fontSize=9;fontFamily=Microsoft YaHei;spacingLeft=6;" vertex="1" parent="1">
-          <mxGeometry x="397" y="282" width="230" height="38" as="geometry"/>
+        <mxCell id="c31" value="student creation is the example; teacher creation is similar, updates and removals have their own checks" style="shape=note;whiteSpace=wrap;html=0;size=12;fillColor=#FFFDE7;strokeColor=#C9A227;align=left;verticalAlign=middle;fontSize=9;fontFamily=Microsoft YaHei;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="397" y="282" width="250" height="38" as="geometry"/>
         </mxCell>
       </root>
     </mxGraphModel>
