@@ -1,0 +1,23 @@
+大学选课系统：第一周代码文件阅读顺序
+
+建议按下面顺序看。
+
+1. PROJECT_OVERVIEW_AND_BUILD_INSTRUCTIONS.txt
+   看目前做了哪些功能，以及如何运行。
+2. header_files/course_registration_business_rules.hpp
+   看 Course、TeachingClass、Enrollment、RegistrationRule 各表示什么。
+   RegistrationService 下方列出的函数，就是其他组员以后可调用的接口。
+3. source_code/course_registration_business_rules.cpp
+   先只看 enroll() 里编号 1 至 7 的注释；每一段对应一个业务步骤。
+   再看 drop() 如何把有效选课改成已退课。
+4. source_code/course_registration_console_demonstration.cpp
+   看一个学生选课、查看余量、退课的小例子。
+5. automated_tests/course_registration_business_rules_tests.cpp
+   看成功、满员、重复、冲突、学分超限、关闭时段等情况。
+6. documentation/TEAM_INTERFACE_AGREEMENT_DRAFT.txt
+   看三人需要共同确定的数据格式和函数名称。
+7. CMakeLists.txt
+   这是自动编译配置；初次阅读业务代码时可以先跳过。
+
+文件后缀说明：.hpp 是声明数据和函数的头文件；.cpp 是可编译的实现或示例；
+.txt 是可用记事本打开的说明；CMakeLists.txt 是编译配置。
