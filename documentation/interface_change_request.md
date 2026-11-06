@@ -74,16 +74,17 @@
       沿用 `registration_open`）。
 - [ ] 如不同意追加 `ResultCode`，请说明希望的错误码方案，我改成你们的版本。
 
-## 四、另外需要你确认的两处行为
+## 四、另外需要你确认的一处行为
 
-1. **选课时段按请求时刻现算，不缓存**：`SystemContext::registration_window_open_at(moment)`
-   用两个条件判断（`moment >= opens_at` 且 `moment < closes_at`），
-   `refresh_registration_window()` 把结果写回 `registration_open`；`enroll()`/`drop()`
-   仍然只读这一个布尔值，不知道时间段的存在。
-   注意：如果只在管理员保存时段时算一次，时间走过关闭时刻后状态会停在旧值，
-   所以每次选课或退课请求前都要再算一次。**需要你拍板放在哪里**：
-   `enroll()` 入口（要改你的文件），或 Web/控制台一层（不改你的文件）。
-   管理员手动 `close_registration` 会清空起止时间，避免下一次现算又被时段打开。
+> **本节第 1 条已废弃，保留作为历史记录。** 它写的是"`enroll()`/`drop()` 只读旧布尔值、
+> 需要请求前刷新"的早期方案；实际实现已在缺陷-001/003 的修复中改为选退课自己按当前时间判断，
+> 见第五、六节。若只想看最终结论，直接读第五、六节，不必读下面第 1 条。
+
+1. ~~选课时段按请求时刻现算，不缓存~~（**已废弃**）：原方案是
+   `refresh_registration_window()` 把结果写回 `registration_open`，再由 `enroll()`/`drop()`
+   只读这个布尔值，并要求每次请求前刷新。该方案已被替换：现在
+   `enroll()`/`drop()` 直接调用 `RegistrationService::registration_open_now()`
+   按当前时间现算，`refresh_registration_window()` 只用于同步显示状态。
 2. **`enroll()` 不校验学生是否已登记**：现有实现只检查教学班是否存在。未登记学生的有效选课
    会出现在人数里但不在教师名单中，由 `check_data_integrity` 报告为不一致。
    是否需要我在选课入口加"学生必须已登记"的检查（会改变你现有测试中

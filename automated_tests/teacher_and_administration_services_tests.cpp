@@ -830,6 +830,80 @@ void test_defect_010_credit_limit_locked_after_open() {
                ResultCode::InvalidInput);
 }
 
+// 缺陷-010 复现（第二轮）：提前预约、按时间自动开放后，把时段改到未来也不能解锁学分上限。
+void test_defect_010_reserved_window_cannot_unlock_credits() {
+    // 场景 1：无人选课。预约明天开放 → 到点自动开放 → 把时段改到后天 → 再改上限。
+    {
+        Fixture fixture(RegistrationRule{false, 18, "", ""});
+        AdministratorService administration(fixture.context);
+        fixture.context.set_now_for_tests("2026-11-02T08:00");
+
+        // 预约未开始前：允许修改上限
+        CHECK_CODE(administration.set_registration_period(
+                       fixture.admin, "2026-11-03T09:00", "2026-11-03T11:00"),
+                   ResultCode::Success);
+        CHECK(!fixture.context.registration_window_open());
+        CHECK_CODE(administration.set_maximum_credits(fixture.admin, 20),
+                   ResultCode::Success);
+        CHECK(fixture.context.rule().maximum_credits == 20);
+        CHECK_CODE(administration.set_maximum_credits(fixture.admin, 18),
+                   ResultCode::Success);
+
+        // 时间到点，系统自动开放；没有任何人调用过接口，也没有学生选课
+        fixture.context.set_now_for_tests("2026-11-03T10:00");
+        CHECK(fixture.context.registration_window_open());
+
+        // 直接把时段改到明天，不能因此"重新开始一轮"
+        CHECK_CODE(administration.set_registration_period(
+                       fixture.admin, "2026-11-04T09:00", "2026-11-04T11:00"),
+                   ResultCode::Success);
+        const OperationResult blocked =
+            administration.set_maximum_credits(fixture.admin, 12);
+        CHECK_CODE(blocked, ResultCode::InvalidInput);
+        CHECK_MESSAGE(blocked, "still 18");
+        CHECK(fixture.context.rule().maximum_credits == 18);
+    }
+
+    // 场景 2：已有学生选课成功。结论必须与场景 1 一致。
+    {
+        Fixture fixture(RegistrationRule{false, 18, "", ""});
+        AdministratorService administration(fixture.context);
+        fixture.context.set_now_for_tests("2026-11-02T08:00");
+        CHECK_CODE(administration.set_registration_period(
+                       fixture.admin, "2026-11-03T09:00", "2026-11-03T11:00"),
+                   ResultCode::Success);
+        fixture.context.set_now_for_tests("2026-11-03T10:00");
+        CHECK_CODE(fixture.context.registration().enroll(1001, 10),
+                   ResultCode::Success);
+        CHECK_CODE(administration.set_registration_period(
+                       fixture.admin, "2026-11-04T09:00", "2026-11-04T11:00"),
+                   ResultCode::Success);
+        CHECK_CODE(administration.set_maximum_credits(fixture.admin, 12),
+                   ResultCode::InvalidInput);
+        CHECK(fixture.context.rule().maximum_credits == 18);
+        // 已经选上的记录不受影响
+        CHECK(fixture.context.enrollment_count(10) == 1);
+    }
+
+    // 场景 3：原时段自然结束后，把时段改到未来，同样不能解锁。
+    {
+        Fixture fixture(RegistrationRule{false, 18, "", ""});
+        AdministratorService administration(fixture.context);
+        fixture.context.set_now_for_tests("2026-11-02T08:00");
+        CHECK_CODE(administration.set_registration_period(
+                       fixture.admin, "2026-11-03T09:00", "2026-11-03T11:00"),
+                   ResultCode::Success);
+        fixture.context.set_now_for_tests("2026-11-03T12:00");
+        CHECK(!fixture.context.registration_window_open());
+        CHECK_CODE(administration.set_registration_period(
+                       fixture.admin, "2026-11-05T09:00", "2026-11-05T11:00"),
+                   ResultCode::Success);
+        CHECK_CODE(administration.set_maximum_credits(fixture.admin, 12),
+                   ResultCode::InvalidInput);
+        CHECK(fixture.context.rule().maximum_credits == 18);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // UC16 Manage Student / Teacher Information
 // ---------------------------------------------------------------------------
@@ -1056,6 +1130,7 @@ int main() {
     test_defect_007_failed_query_clears_output();
     test_defect_009_rejects_impossible_dates();
     test_defect_010_credit_limit_locked_after_open();
+    test_defect_010_reserved_window_cannot_unlock_credits();
     test_uc16_student_records();
     test_uc16_teacher_records();
     test_data_integrity_check();

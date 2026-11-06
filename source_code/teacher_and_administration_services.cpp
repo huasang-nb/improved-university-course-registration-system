@@ -997,12 +997,17 @@ OperationResult AdministratorService::set_registration_period(
                     opens_at + " -> " + closes_at + ")"};
     }
 
+    // 缺陷-010 修复（第二次）：必须在覆盖旧时段之前，先用**旧规则**记录
+    // "本轮是否已经开放过"。提前预约的时段会按时间自动开放，如果先写入新时段
+    // 再观察，旧时段已经被覆盖，就看不出本轮开放过，从而可以改学分上限。
+    context_.observe_registration_round();
+
     RegistrationRule rule = context_.rule();
     rule.opens_at = opens_at;
     rule.closes_at = closes_at;
     context_.apply_rule_change(rule);
     context_.refresh_registration_window();
-    // 若这个时段此刻已经开放，本轮就算作已开放，学分上限随之锁住。
+    // 新时段也可能立即开放（例如把时段设成当前正在进行的区间），同样要记录。
     context_.observe_registration_round();
 
     const RegistrationRule applied = context_.rule();
