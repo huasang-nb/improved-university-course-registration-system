@@ -1,0 +1,87 @@
+<svg width="1760" height="1128" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="arr" markerWidth="10" markerHeight="8" refX="9" refY="3" orient="auto"><path d="M0,0 L9,3 L0,6 Z" fill="#333"/></marker>
+<marker id="arrRet" markerWidth="10" markerHeight="8" refX="9" refY="3" orient="auto"><path d="M0,0 L9,3 L0,6 Z" fill="#666"/></marker>
+</defs>
+<text x="880.0" y="34" text-anchor="middle" font-size="23" font-weight="bold" fill="#1a1a1a">Fig. B1 — UC02 Search / View Courses</text>
+<text x="880.0" y="60" text-anchor="middle" font-size="14" fill="#666">Improved University Course Registration System  ·  Task 3 dynamic modelling  ·  Zhang Yikai (Member B)</text>
+<rect x="45.0" y="96" width="214" height="54" fill="#fff" stroke="#4a6fa5" stroke-width="1.6"/>
+<rect x="45.0" y="96" width="214" height="9" fill="#4a6fa5"/>
+<text x="152.0" y="134" text-anchor="middle" font-size="15" font-weight="bold" fill="#1f1f1f">Student</text>
+<line x1="152.0" y1="150" x2="152.0" y2="1094" stroke="#b9b9b9" stroke-width="1" stroke-dasharray="7,6"/>
+<rect x="530.3333333333333" y="96" width="214" height="54" fill="#fff" stroke="#5b7fa8" stroke-width="1.6"/>
+<rect x="530.3333333333333" y="96" width="214" height="9" fill="#5b7fa8"/>
+<text x="637.3333333333333" y="134" text-anchor="middle" font-size="15" font-weight="bold" fill="#1f1f1f">Registration UI</text>
+<line x1="637.3333333333333" y1="150" x2="637.3333333333333" y2="1094" stroke="#b9b9b9" stroke-width="1" stroke-dasharray="7,6"/>
+<rect x="1015.6666666666665" y="96" width="214" height="54" fill="#fff" stroke="#2e7d5b" stroke-width="1.6"/>
+<rect x="1015.6666666666665" y="96" width="214" height="9" fill="#2e7d5b"/>
+<text x="1122.6666666666665" y="134" text-anchor="middle" font-size="15" font-weight="bold" fill="#1f1f1f">CatalogService</text>
+<line x1="1122.6666666666665" y1="150" x2="1122.6666666666665" y2="1094" stroke="#b9b9b9" stroke-width="1" stroke-dasharray="7,6"/>
+<rect x="1501.0" y="96" width="214" height="54" fill="#fff" stroke="#8a6d3b" stroke-width="1.6"/>
+<rect x="1501.0" y="96" width="214" height="9" fill="#8a6d3b"/>
+<text x="1608.0" y="134" text-anchor="middle" font-size="15" font-weight="bold" fill="#1f1f1f">SystemContext</text>
+<line x1="1608.0" y1="150" x2="1608.0" y2="1094" stroke="#b9b9b9" stroke-width="1" stroke-dasharray="7,6"/>
+<rect x="56" y="444" width="1648" height="572" fill="none" stroke="#9a9a9a" stroke-width="1.2"/>
+<rect x="56" y="444" width="78" height="26" fill="#f0f0f0" stroke="#9a9a9a" stroke-width="1.2"/>
+<text x="95" y="462" text-anchor="middle" font-size="13" font-weight="bold" fill="#444">alt</text>
+<text x="144" y="462" font-size="13" fill="#333">[at least one match]</text>
+<line x1="56" y1="896" x2="1704" y2="896" stroke="#9a9a9a" stroke-width="1" stroke-dasharray="6,5"/>
+<text x="66" y="915" font-size="12.5" font-weight="bold" fill="#444">else</text>
+<text x="100" y="915" font-size="12.5" fill="#333">[no match]</text>
+<rect x="72" y="566" width="1616" height="338" fill="none" stroke="#9a9a9a" stroke-width="1.2"/>
+<rect x="72" y="566" width="78" height="26" fill="#f0f0f0" stroke="#9a9a9a" stroke-width="1.2"/>
+<text x="111" y="584" text-anchor="middle" font-size="13" font-weight="bold" fill="#444">opt</text>
+<text x="160" y="584" font-size="13" fill="#333">[student selects a course]</text>
+<line x1="152.0" y1="210" x2="637.3333333333333" y2="210" stroke="#333" stroke-width="1.4" marker-end="url(#arr)"/>
+<rect x="209.66666666666663" y="188" width="370.0" height="20" fill="#ffffff" fill-opacity="0.92"/>
+<text x="394.66666666666663" y="203" text-anchor="middle" font-size="13.5" fill="#333">enter keyword (course code / title / teacher name)</text>
+<line x1="637.3333333333333" y1="262" x2="1122.6666666666665" y2="262" stroke="#333" stroke-width="1.4" marker-end="url(#arr)"/>
+<rect x="792.9999999999999" y="240" width="174.0" height="20" fill="#ffffff" fill-opacity="0.92"/>
+<text x="879.9999999999999" y="255" text-anchor="middle" font-size="13.5" fill="#333">searchCourses(keyword)</text>
+<line x1="1122.6666666666665" y1="314" x2="1608.0" y2="314" stroke="#333" stroke-width="1.4" marker-end="url(#arr)"/>
+<rect x="1309.8333333333333" y="292" width="111.0" height="20" fill="#ffffff" fill-opacity="0.92"/>
+<text x="1365.3333333333333" y="307" text-anchor="middle" font-size="13.5" fill="#333">listCourses()</text>
+<line x1="1608.0" y1="366" x2="1122.6666666666665" y2="366" stroke="#666" stroke-width="1.4" stroke-dasharray="7,5" marker-end="url(#arrRet)"/>
+<rect x="1292.3333333333333" y="344" width="146.0" height="20" fill="#ffffff" fill-opacity="0.92"/>
+<text x="1365.3333333333333" y="359" text-anchor="middle" font-size="13.5" fill="#666">all Course records</text>
+<path d="M1122.6666666666665 418 L1174.6666666666665 418 L1174.6666666666665 436 L1126.6666666666665 436" fill="none" stroke="#333" stroke-width="1.4" marker-end="url(#arr)"/>
+<text x="1182.6666666666665" y="424" font-size="13.5" fill="#333">match on code, title or teacher name</text>
+<line x1="1122.6666666666665" y1="488" x2="637.3333333333333" y2="488" stroke="#666" stroke-width="1.4" stroke-dasharray="7,5" marker-end="url(#arrRet)"/>
+<rect x="803.4999999999999" y="466" width="153.0" height="20" fill="#ffffff" fill-opacity="0.92"/>
+<text x="879.9999999999999" y="481" text-anchor="middle" font-size="13.5" fill="#666">matched Course list</text>
+<line x1="637.3333333333333" y1="540" x2="152.0" y2="540" stroke="#666" stroke-width="1.4" stroke-dasharray="7,5" marker-end="url(#arrRet)"/>
+<rect x="269.16666666666663" y="518" width="251.0" height="20" fill="#ffffff" fill-opacity="0.92"/>
+<text x="394.66666666666663" y="533" text-anchor="middle" font-size="13.5" fill="#666">course rows: code, title, credits</text>
+<line x1="152.0" y1="610" x2="637.3333333333333" y2="610" stroke="#333" stroke-width="1.4" marker-end="url(#arr)"/>
+<rect x="332.16666666666663" y="588" width="125.0" height="20" fill="#ffffff" fill-opacity="0.92"/>
+<text x="394.66666666666663" y="603" text-anchor="middle" font-size="13.5" fill="#333">open one course</text>
+<line x1="637.3333333333333" y1="662" x2="1122.6666666666665" y2="662" stroke="#333" stroke-width="1.4" marker-end="url(#arr)"/>
+<rect x="768.4999999999999" y="640" width="223.0" height="20" fill="#ffffff" fill-opacity="0.92"/>
+<text x="879.9999999999999" y="655" text-anchor="middle" font-size="13.5" fill="#333">listTeachingClasses(courseId)</text>
+<line x1="1122.6666666666665" y1="714" x2="1608.0" y2="714" stroke="#333" stroke-width="1.4" marker-end="url(#arr)"/>
+<rect x="1253.8333333333333" y="692" width="223.0" height="20" fill="#ffffff" fill-opacity="0.92"/>
+<text x="1365.3333333333333" y="707" text-anchor="middle" font-size="13.5" fill="#333">findTeachingClasses(courseId)</text>
+<line x1="1608.0" y1="766" x2="1122.6666666666665" y2="766" stroke="#666" stroke-width="1.4" stroke-dasharray="7,5" marker-end="url(#arrRet)"/>
+<rect x="1281.8333333333333" y="744" width="167.0" height="20" fill="#ffffff" fill-opacity="0.92"/>
+<text x="1365.3333333333333" y="759" text-anchor="middle" font-size="13.5" fill="#666">TeachingClass records</text>
+<line x1="1122.6666666666665" y1="818" x2="637.3333333333333" y2="818" stroke="#666" stroke-width="1.4" stroke-dasharray="7,5" marker-end="url(#arrRet)"/>
+<rect x="768.4999999999999" y="796" width="223.0" height="20" fill="#ffffff" fill-opacity="0.92"/>
+<text x="879.9999999999999" y="811" text-anchor="middle" font-size="13.5" fill="#666">teacher, schedule, seats left</text>
+<line x1="637.3333333333333" y1="870" x2="152.0" y2="870" stroke="#666" stroke-width="1.4" stroke-dasharray="7,5" marker-end="url(#arrRet)"/>
+<rect x="276.16666666666663" y="848" width="237.0" height="20" fill="#ffffff" fill-opacity="0.92"/>
+<text x="394.66666666666663" y="863" text-anchor="middle" font-size="13.5" fill="#666">teaching-class page (read only)</text>
+<line x1="1122.6666666666665" y1="930" x2="637.3333333333333" y2="930" stroke="#666" stroke-width="1.4" stroke-dasharray="7,5" marker-end="url(#arrRet)"/>
+<rect x="792.9999999999999" y="908" width="174.0" height="20" fill="#ffffff" fill-opacity="0.92"/>
+<text x="879.9999999999999" y="923" text-anchor="middle" font-size="13.5" fill="#666">empty list (0 matches)</text>
+<line x1="637.3333333333333" y1="982" x2="152.0" y2="982" stroke="#666" stroke-width="1.4" stroke-dasharray="7,5" marker-end="url(#arrRet)"/>
+<rect x="272.66666666666663" y="960" width="244.0" height="20" fill="#ffffff" fill-opacity="0.92"/>
+<text x="394.66666666666663" y="975" text-anchor="middle" font-size="13.5" fill="#666">'No course matches the keyword.'</text>
+<rect x="601.5999999999999" y="1024" width="556.8000000000001" height="26" fill="#fffbea" stroke="#d8c48a" stroke-width="1"/>
+<text x="880.0" y="1042" text-anchor="middle" font-size="13" fill="#6b5a1f">[ read-only: no Enrollment record is created or changed in this use case ]</text>
+<line x1="70" y1="1110" x2="130" y2="1110" stroke="#333" stroke-width="1.4" marker-end="url(#arr)"/>
+<text x="138" y="1114" font-size="12.5" fill="#555">call</text>
+<line x1="210" y1="1110" x2="270" y2="1110" stroke="#666" stroke-width="1.4" stroke-dasharray="7,5" marker-end="url(#arrRet)"/>
+<text x="278" y="1114" font-size="12.5" fill="#555">return</text>
+<rect x="350" y="1102" width="54" height="16" fill="none" stroke="#9a9a9a"/>
+<text x="412" y="1114" font-size="12.5" fill="#555">alt / loop fragment (failure path in alt)</text>
+</svg>

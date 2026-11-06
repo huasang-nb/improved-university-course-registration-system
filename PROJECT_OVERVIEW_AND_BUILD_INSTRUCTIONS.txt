@@ -1,0 +1,35 @@
+大学选课系统：第一周 C++ 代码说明
+
+一、现在实现了什么
+这是 Zhang Yuhua 的本地起步版本，尚未上传到小组 GitHub。
+程序使用内存中的示例课程和教学班，已经能处理选课、退课、有效选课人数和剩余名额。
+选课依次检查：开放时段、同一课程重复选课、上课时间冲突、学分上限、剩余名额。
+任一检查失败时不改动选课记录。退课把记录标记为 Dropped；剩余名额按有效记录重新计算。
+
+二、还没有实现什么
+登录、课程搜索、个人课表、教师查询、管理员修改、数据库和网页界面都属于后续阶段。
+示例中的学分上限是测试数据，不是甲方确认的固定数值。
+目前课程和教学班由程序初始化；它们之间的编号对应关系由初始化数据保证。
+以后接入数据库或外部文件时，应在读取数据的入口校验这项关系。
+
+三、怎么编译
+需要支持 C++17 的 g++。在本文件所在的项目文件夹打开终端，输入：
+
+g++ -std=c++17 -Iheader_files source_code/course_registration_business_rules.cpp source_code/course_registration_console_demonstration.cpp -o course_registration_console_demonstration.exe
+
+运行演示：
+.\course_registration_console_demonstration.exe
+
+编译测试：
+g++ -std=c++17 -Iheader_files source_code/course_registration_business_rules.cpp automated_tests/course_registration_business_rules_tests.cpp -o course_registration_business_rules_tests.exe
+
+运行测试：
+.\course_registration_business_rules_tests.exe
+
+也提供 CMakeLists.txt，供已安装 CMake 的组员使用。
+
+四、推荐阅读顺序
+先看 header_files/course_registration_business_rules.hpp，了解数据和可调用函数。
+再看 source_code/course_registration_business_rules.cpp 中的 enroll()，按编号读 1 至 7 步。
+然后运行 source_code/course_registration_console_demonstration.cpp。
+最后看 automated_tests/course_registration_business_rules_tests.cpp 中各规则的例子。
