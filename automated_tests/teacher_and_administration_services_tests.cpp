@@ -325,13 +325,27 @@ void test_uc13_removal_respects_relationships() {
     CHECK_CODE(administration.remove_teaching_class(fixture.admin, 10),
                ResultCode::CatalogInUse);
 
-    // 无选课记录的教学班可以删除，删除后课程才可删除。
+    // URS 6.7：每门课程至少保留一个教学班。课程 3 只有教学班 30，删除被拒绝且数据保留。
+    const OperationResult last_class =
+        administration.remove_teaching_class(fixture.admin, 30);
+    CHECK_CODE(last_class, ResultCode::CatalogInUse);
+    CHECK_MESSAGE(last_class, "last one of course");
+    TeachingClass still_there{};
+    CHECK(fixture.context.find_teaching_class(30, still_there));
+    CHECK(still_there.course_id == 3);
+
+    // 给课程 3 再加一个班后，可以删除其中一个；最后一个班和课程本身都不能再删。
+    CHECK_CODE(administration.create_teaching_class(
+                   fixture.admin, make_class(31, 3, 300, 2, 4, 600, 660, "C302")),
+               ResultCode::Success);
     CHECK_CODE(administration.remove_teaching_class(fixture.admin, 30),
                ResultCode::Success);
     CHECK_CODE(administration.remove_course(fixture.admin, 3),
-               ResultCode::Success);
+               ResultCode::CatalogInUse);
+    CHECK_CODE(administration.remove_teaching_class(fixture.admin, 31),
+               ResultCode::CatalogInUse);
     CHECK_CODE(administration.remove_course(fixture.admin, 3),
-               ResultCode::RecordNotFound);
+               ResultCode::CatalogInUse);
 
     // 管理员以外的人不能删除。
     CHECK_CODE(administration.remove_teaching_class(fixture.dr_wang, 11),
@@ -605,8 +619,11 @@ void test_defect_002_course_change_blocked_while_enrolled() {
     CHECK(stored.meetings.size() == 1);
     CHECK(stored.meetings[0].start_minute == 900);
 
-    // 学生退课之后可以改课程，说明限制只在有有效选课时生效。
+    // 学生退课之后可以改课程，但前提是原课程还留着别的教学班（URS 6.7）。
     CHECK_CODE(fixture.context.registration().drop(1001, 30),
+               ResultCode::Success);
+    CHECK_CODE(administration.create_teaching_class(
+                   fixture.admin, make_class(31, 3, 300, 2, 4, 600, 660, "C302")),
                ResultCode::Success);
     CHECK_CODE(
         administration.update_teaching_class(fixture.admin, to_course_one),
@@ -680,12 +697,30 @@ void test_defect_006_delete_message_uses_deleted_record() {
     CHECK_CODE(gone, ResultCode::RecordNotFound);
     CHECK_MESSAGE(gone, "1003");
 
-    // 教师：先删掉没有选课记录的教学班，再按首条、中间、末条删除
-    for (int class_id : {10, 11, 20, 30}) {
-        CHECK_CODE(
-            administration.remove_teaching_class(fixture.admin, class_id),
-            ResultCode::Success);
+    // 教师：每门课程必须保留至少一个教学班，所以不能靠删班来腾出教师；
+    // 这里把每个班改派给一位新教师，再按首条、中间、末条删除原教师。
+    const int relief_ids[4] = {401, 402, 403, 404};
+    for (int index = 0; index < 4; ++index) {
+        CHECK_CODE(administration.create_teacher(
+                       fixture.admin,
+                       {relief_ids[index],
+                        "T20204" + std::to_string(index + 1),
+                        "Relief " + std::to_string(index + 1), "General", true}),
+                   ResultCode::Success);
     }
+    CHECK_CODE(administration.update_teaching_class(
+                   fixture.admin, make_class(10, 1, 401, 2, 1, 540, 600, "A101")),
+               ResultCode::Success);
+    CHECK_CODE(administration.update_teaching_class(
+                   fixture.admin, make_class(11, 1, 402, 2, 2, 540, 600, "A102")),
+               ResultCode::Success);
+    CHECK_CODE(administration.update_teaching_class(
+                   fixture.admin, make_class(20, 2, 403, 2, 1, 570, 630, "B201")),
+               ResultCode::Success);
+    CHECK_CODE(administration.update_teaching_class(
+                   fixture.admin, make_class(30, 3, 404, 2, 3, 840, 900, "C301")),
+               ResultCode::Success);
+
     const OperationResult teacher_first =
         administration.remove_teacher(fixture.admin, 100);
     CHECK_CODE(teacher_first, ResultCode::Success);
@@ -701,7 +736,11 @@ void test_defect_006_delete_message_uses_deleted_record() {
         administration.remove_teacher(fixture.admin, 300);
     CHECK_CODE(teacher_last, ResultCode::Success);
     CHECK_MESSAGE(teacher_last, "T2018003");
-    CHECK(fixture.context.teachers().empty());
+    // 三人都已删除；接手的 401～404 是新教师，不应被一起清掉。
+    CHECK(fixture.context.find_teacher(100) == nullptr);
+    CHECK(fixture.context.find_teacher(200) == nullptr);
+    CHECK(fixture.context.find_teacher(300) == nullptr);
+    CHECK(fixture.context.find_teacher(401) != nullptr);
 }
 
 // 缺陷-007 复现：查询失败后，输出里不能残留上一次成功的班级。
@@ -947,18 +986,27 @@ void test_uc16_student_records() {
                    fixture.admin, {9999, "S2023999", "Ghost", "Mathematics", true}),
                ResultCode::RecordNotFound);
 
-    // 有有效选课的学生不能删除。
+    // 新规则：只要存在任何选课或退课记录，就不允许删除学生；
+    // 退课后的 Dropped 记录同样属于历史，必须保留学生资料（可改用停用账号）。
     CHECK_CODE(fixture.context.registration().enroll(1001, 10),
                ResultCode::Success);
-    CHECK_CODE(administration.remove_student(fixture.admin, 1001),
-               ResultCode::CatalogInUse);
-    CHECK_MESSAGE(administration.remove_student(fixture.admin, 1001),
-                  "active enrollment");
+    const OperationResult with_active =
+        administration.remove_student(fixture.admin, 1001);
+    CHECK_CODE(with_active, ResultCode::CatalogInUse);
+    CHECK_MESSAGE(with_active, "active");
+
     CHECK_CODE(fixture.context.registration().drop(1001, 10),
                ResultCode::Success);
-    CHECK_CODE(administration.remove_student(fixture.admin, 1001),
+    const OperationResult with_history =
+        administration.remove_student(fixture.admin, 1001);
+    CHECK_CODE(with_history, ResultCode::CatalogInUse);
+    CHECK_MESSAGE(with_history, "dropped");
+    CHECK(fixture.context.find_student(1001) != nullptr);  // 资料保留
+
+    // 完全没有记录的学生仍然可以删除。
+    CHECK_CODE(administration.remove_student(fixture.admin, 1003),
                ResultCode::Success);
-    CHECK(fixture.context.find_student(1001) == nullptr);
+    CHECK(fixture.context.find_student(1003) == nullptr);
 
     // 学生不能维护其他学生资料。
     CHECK_CODE(administration.create_student(
@@ -1004,6 +1052,152 @@ void test_uc16_teacher_records() {
     CHECK_CODE(administration.create_teacher(
                    fixture.dr_wang, {405, "T2020005", "Dr. Fake", "Physics", true}),
                ResultCode::PermissionDenied);
+}
+
+// ---------------------------------------------------------------------------
+// URS 6.7：每门课程至少保留一个教学班
+// ---------------------------------------------------------------------------
+
+void test_course_requires_at_least_one_teaching_class() {
+    Fixture fixture;
+    AdministratorService administration(fixture.context);
+
+    // 1. 删除某课程唯一的教学班：拒绝，原数据保留。
+    const OperationResult last_class =
+        administration.remove_teaching_class(fixture.admin, 20);
+    CHECK_CODE(last_class, ResultCode::CatalogInUse);
+    CHECK_MESSAGE(last_class, "last one of course");
+    TeachingClass stored{};
+    CHECK(fixture.context.find_teaching_class(20, stored));
+    CHECK(stored.course_id == 2);
+    Course course_two{};
+    CHECK(fixture.context.find_course(2, course_two));
+
+    // 2. 把某课程唯一的教学班移到另一门课：拒绝，两门课都不变。
+    const OperationResult moved =
+        administration.update_teaching_class(
+            fixture.admin, make_class(20, 1, 200, 2, 1, 570, 630, "B201"));
+    CHECK_CODE(moved, ResultCode::CatalogInUse);
+    CHECK_MESSAGE(moved, "last one of course");
+    CHECK(fixture.context.find_teaching_class(20, stored));
+    CHECK(stored.course_id == 2);
+
+    // 3. 课程有第二个班之后可以删掉其中一个；剩下的最后一个班仍然不能删，
+    //    课程本身也就不能删（删除课程仍要求先没有教学班）。
+    CHECK_CODE(administration.create_teaching_class(
+                   fixture.admin, make_class(21, 2, 200, 2, 5, 600, 660, "B202")),
+               ResultCode::Success);
+    CHECK_CODE(administration.remove_teaching_class(fixture.admin, 20),
+               ResultCode::Success);
+    CHECK(fixture.context.find_teaching_class(20, stored) == false);
+
+    const OperationResult move_only =
+        administration.update_teaching_class(
+            fixture.admin, make_class(21, 3, 200, 2, 5, 600, 660, "B202"));
+    CHECK_CODE(move_only, ResultCode::CatalogInUse);
+    CHECK_CODE(administration.remove_teaching_class(fixture.admin, 21),
+               ResultCode::CatalogInUse);
+    CHECK_CODE(administration.remove_course(fixture.admin, 2),
+               ResultCode::CatalogInUse);
+
+    // 4. 没有任何教学班的课程（当前只能由 create_course 单独创建）可以删除课程本身，
+    //    这是 remove_course() 目前唯一能成功的路径，也是待讨论的"原子创建"的另一面。
+    CHECK_CODE(administration.create_course(
+                   fixture.admin, {4, "PH101", "Physics", 3}),
+               ResultCode::Success);
+    CHECK_CODE(administration.remove_course(fixture.admin, 4),
+               ResultCode::Success);
+
+    // 5. 一致性检查会报告"没有教学班"的课程。
+    CHECK_CODE(administration.create_course(
+                   fixture.admin, {5, "PH102", "Physics II", 3}),
+               ResultCode::Success);
+    std::vector<std::string> problems;
+    CHECK_CODE(administration.check_data_integrity(fixture.admin, problems),
+               ResultCode::InvalidInput);
+    bool reported = false;
+    for (const std::string& problem : problems) {
+        if (problem.find("PH102 has no teaching class") != std::string::npos) {
+            reported = true;
+        }
+    }
+    CHECK(reported);
+
+    // 补上首个教学班后一致性问题消失。
+    CHECK_CODE(administration.create_teaching_class(
+                   fixture.admin, make_class(40, 5, 100, 2, 4, 600, 660, "A201")),
+               ResultCode::Success);
+    CHECK_CODE(administration.check_data_integrity(fixture.admin, problems),
+               ResultCode::Success);
+    CHECK(problems.empty());
+}
+
+// ---------------------------------------------------------------------------
+// 改派教师时的账号状态检查
+// ---------------------------------------------------------------------------
+
+void test_inactive_teacher_cannot_be_assigned() {
+    Fixture fixture;
+    AdministratorService administration(fixture.context);
+
+    // 停用教师：创建账号本身允许（用于保留历史资料）。
+    CHECK_CODE(administration.create_teacher(
+                   fixture.admin, {403, "T2020003", "Dr. Retired", "Physics", false}),
+               ResultCode::Success);
+
+    // 创建教学班拒绝，改派同样拒绝，且原任课教师保持不变。
+    CHECK_CODE(administration.create_teaching_class(
+                   fixture.admin, make_class(50, 1, 403, 2, 5, 600, 660, "D101")),
+               ResultCode::InvalidInput);
+
+    const TeachingClass class_ten = make_class(10, 1, 100, 2, 1, 540, 600, "A101");
+    const OperationResult reassigned = administration.update_teaching_class(
+        fixture.admin, make_class(10, 1, 403, 2, 1, 540, 600, "A101"));
+    CHECK_CODE(reassigned, ResultCode::InvalidInput);
+    CHECK_MESSAGE(reassigned, "not an active account");
+    CHECK_MESSAGE(reassigned, "T2015007");
+
+    TeachingClass stored{};
+    CHECK(fixture.context.find_teaching_class(10, stored));
+    CHECK(stored.teacher_id == 100);  // 原任课教师保留
+
+    // 改派给启用教师仍然可以（这里用 300，避开 200 已占用的周一 09:30-10:30）。
+    CHECK_CODE(administration.update_teaching_class(
+                   fixture.admin, make_class(10, 1, 300, 2, 1, 540, 600, "A101")),
+               ResultCode::Success);
+    CHECK(fixture.context.find_teaching_class(10, stored));
+    CHECK(stored.teacher_id == 300);
+    CHECK(class_ten.teacher_id == 100);  // 输入对象未被修改
+}
+
+// ---------------------------------------------------------------------------
+// 同一教学班内部允许时段重叠（已确认行为，不新增自冲突校验）
+// ---------------------------------------------------------------------------
+
+void test_overlapping_meetings_in_one_class_are_allowed() {
+    Fixture fixture;
+    AdministratorService administration(fixture.context);
+
+    const TeachingClass overlapping{
+        50, 1, 100, 2,
+        {{4, 600, 660, "A201"}, {4, 630, 690, "A202"}}};  // 周四 10:00-11:00 与 10:30-11:30
+    CHECK_CODE(administration.create_teaching_class(fixture.admin, overlapping),
+               ResultCode::Success);
+
+    TeachingClass stored{};
+    CHECK(fixture.context.find_teaching_class(50, stored));
+    CHECK(stored.meetings.size() == 2);
+
+    // 一致性检查不把同一班内部的重叠当成冲突。
+    std::vector<std::string> problems;
+    CHECK_CODE(administration.check_data_integrity(fixture.admin, problems),
+               ResultCode::Success);
+    CHECK(problems.empty());
+
+    // 与其它教学班之间的时间冲突检查仍然生效（教师 100 已有周四 10:00-11:00 的班）。
+    CHECK_CODE(administration.create_teaching_class(
+                   fixture.admin, make_class(51, 1, 100, 2, 4, 660, 720, "A203")),
+               ResultCode::TimeConflict);
 }
 
 // ---------------------------------------------------------------------------
@@ -1133,6 +1327,9 @@ int main() {
     test_defect_010_reserved_window_cannot_unlock_credits();
     test_uc16_student_records();
     test_uc16_teacher_records();
+    test_course_requires_at_least_one_teaching_class();
+    test_inactive_teacher_cannot_be_assigned();
+    test_overlapping_meetings_in_one_class_are_allowed();
     test_data_integrity_check();
     test_weekly_joint_scenario();
 
