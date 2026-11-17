@@ -1201,6 +1201,91 @@ void test_overlapping_meetings_in_one_class_are_allowed() {
 }
 
 // ---------------------------------------------------------------------------
+// 跨角色账号查重（登录账号全局唯一）
+// ---------------------------------------------------------------------------
+
+void test_account_number_is_unique_across_roles() {
+    Fixture fixture;
+    AdministratorService administration(fixture.context);
+
+    // 学生学号撞教师工号
+    const OperationResult student_clash = administration.create_student(
+        fixture.admin, {1004, "T2015007", "Cross Role", "Mathematics", true});
+    CHECK_CODE(student_clash, ResultCode::DuplicateIdentifier);
+    CHECK_MESSAGE(student_clash, "already used by teacher T2015007");
+    CHECK(fixture.context.find_student(1004) == nullptr);
+
+    // 教师工号撞学生学号
+    const OperationResult teacher_clash = administration.create_teacher(
+        fixture.admin, {401, "S2023001", "Cross Role", "Physics", true});
+    CHECK_CODE(teacher_clash, ResultCode::DuplicateIdentifier);
+    CHECK_MESSAGE(teacher_clash, "already used by student S2023001");
+    CHECK(fixture.context.find_teacher(401) == nullptr);
+
+    // 管理员账号同样参与查重（示例数据里 A2020001 属于管理员 900）
+    const OperationResult admin_clash = administration.create_student(
+        fixture.admin, {1005, "A2020001", "Cross Role", "Mathematics", true});
+    CHECK_CODE(admin_clash, ResultCode::DuplicateIdentifier);
+    CHECK_MESSAGE(admin_clash, "already used by administrator A2020001");
+
+    // 大小写不敏感
+    const OperationResult case_clash = administration.create_teacher(
+        fixture.admin, {402, "s2023002", "Case Test", "Physics", true});
+    CHECK_CODE(case_clash, ResultCode::DuplicateIdentifier);
+    CHECK_MESSAGE(case_clash, "already used by student S2023002");
+
+    // 修改自己：账号不变应通过（排除自身）
+    CHECK_CODE(administration.update_student(
+                   fixture.admin,
+                   {1001, "S2023001", "Alice Chen", "Software Engineering", true}),
+               ResultCode::Success);
+    // 改成别的角色在用的账号：拒绝且原值不变
+    const OperationResult update_clash = administration.update_student(
+        fixture.admin,
+        {1001, "T2015007", "Alice Chen", "Software Engineering", true});
+    CHECK_CODE(update_clash, ResultCode::DuplicateIdentifier);
+    CHECK_MESSAGE(update_clash, "already used by teacher T2015007");
+    CHECK(fixture.context.find_student(1001)->student_number == "S2023001");
+
+    // 教师侧同样：改成本人原工号通过，改成学生学号拒绝
+    CHECK_CODE(administration.update_teacher(
+                   fixture.admin,
+                   {100, "T2015007", "Dr. Wang", "Software Engineering", true}),
+               ResultCode::Success);
+    CHECK_CODE(administration.update_teacher(
+                   fixture.admin,
+                   {100, "S2023003", "Dr. Wang", "Software Engineering", true}),
+               ResultCode::DuplicateIdentifier);
+    CHECK(fixture.context.find_teacher(100)->teacher_number == "T2015007");
+}
+
+// 历史数据里已经存在的跨角色重名：一致性检查要能报出来。
+void test_data_integrity_reports_duplicate_accounts() {
+    Fixture fixture;
+    AdministratorService administration(fixture.context);
+
+    std::vector<std::string> problems;
+    CHECK_CODE(administration.check_data_integrity(fixture.admin, problems),
+               ResultCode::Success);
+    CHECK(problems.empty());
+
+    // 绕过服务直接写入重复账号，模拟历史导入的数据。
+    fixture.context.apply_student_change(
+        {1006, "T2016011", "Legacy Import", "Mathematics", true});
+
+    CHECK_CODE(administration.check_data_integrity(fixture.admin, problems),
+               ResultCode::InvalidInput);
+    bool reported = false;
+    for (const std::string& problem : problems) {
+        if (problem.find("account number student T2016011 collides with teacher T2016011") !=
+            std::string::npos) {
+            reported = true;
+        }
+    }
+    CHECK(reported);
+}
+
+// ---------------------------------------------------------------------------
 // 一致性检查
 // ---------------------------------------------------------------------------
 
@@ -1330,6 +1415,8 @@ int main() {
     test_course_requires_at_least_one_teaching_class();
     test_inactive_teacher_cannot_be_assigned();
     test_overlapping_meetings_in_one_class_are_allowed();
+    test_account_number_is_unique_across_roles();
+    test_data_integrity_reports_duplicate_accounts();
     test_data_integrity_check();
     test_weekly_joint_scenario();
 

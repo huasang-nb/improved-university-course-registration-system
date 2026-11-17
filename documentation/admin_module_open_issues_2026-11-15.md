@@ -88,34 +88,30 @@ OperationResult create_course_with_teaching_class(
 
 备选：新增"停用课程"标志代替物理删除。这属于新增需求，本版不建议引入。
 
-## 4. 跨角色账号查重的现状与落地
+## 4. 跨角色账号查重：已实现（2026-11-17）
 
-**现状：只做到各自角色内，跨角色没有。**
+**更新：本节原为"待实施"，现已落地。** 实现见提交 `c0ffee1`（后续提交号以实际为准），
+入口 `SystemContext::find_account_owner()`。
 
-| 入口 | 当前检查 |
+**改动前**：只做到各自角色内（student_number 只在学生里查，teacher_number 只在教师里查）。
+
+**改动后**
+
+| 入口 | 现在的检查 |
 |---|---|
-| `create_student` | student_id 在 students 内唯一；student_number 在 students 内唯一 |
-| `create_teacher` | teacher_id 在 teachers 内唯一；teacher_number 在 teachers 内唯一 |
-| `update_student` / `update_teacher` | 学号/工号查重并排除自身 |
-| `check_data_integrity` | **不检查**重复账号 |
-| 管理员账号 | 没有维护接口，三缺一 |
+| `create_student` | 自身 id/学号唯一 + **跨角色查重**（学生、教师、管理员三类账号） |
+| `create_teacher` | 自身 id/工号唯一 + **跨角色查重** |
+| `update_student` / `update_teacher` | 角色内查重、排除自身 + **跨角色查重**（同样排除自身） |
+| `check_data_integrity` | **新增**"account number X collides with Y"问题项，可检查历史重名 |
+| 管理员账号 | 参与查重（读取 `administrators_`）；但仍**没有维护接口**，只能由种子数据/导入产生 |
 
-因此"教师工号 T200"与"学生学号 T200"目前可以并存，与登录要求冲突。
+- 账号比较**大小写不敏感**（`T2015007` 与 `t2015007` 视为同一账号）。
+- 冲突统一返回 `DuplicateIdentifier`，消息形如
+  `student_number T2015007 is already used by teacher T2015007`。
 
-**按"登录账号跨角色全局唯一"落地，需覆盖三处**
+登录侧（Yuhua）：登录时按账号在三种角色里查，命中多条应报数据错误，不要静默取第一条。
 
-1. **新增**：在 `SystemContext` 增加 `account_number_taken(number, exclude_role, exclude_id)`，
-   同时查学生、教师（以及将来的管理员）；`create_student`、`create_teacher` 调用它，
-   冲突返回 `DuplicateIdentifier`，消息注明被哪类角色占用。
-2. **修改**：`update_student`、`update_teacher` 同样调用并排除自身，防止 A 改成 B 的账号。
-3. **已有数据**：`check_data_integrity` 增加"同一账号标识被多个角色使用"问题项，演示前可自查。
-
-登录侧（Yuhua）：登录时按账号在三张表里查，命中多条应报数据错误，不要静默取第一条。
-
-**内部数字 ID**：继续待确认。若要求全局唯一，需统一 ID 空间与生成规则，属于另一件改动，
-不建议与账号查重捆在一起。
-
-工作量估计：1 个提交（1 个查询 + 4 处调用 + 1 条一致性检查 + 4 组测试）。
+**内部数字 ID**：继续待确认。若要求全局唯一，需统一 ID 空间与生成规则，属于另一件改动。
 
 ## 5. 分支、测试与配合事项
 

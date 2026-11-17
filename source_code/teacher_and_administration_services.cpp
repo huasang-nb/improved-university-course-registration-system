@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <ctime>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace course_registration {
@@ -98,6 +99,18 @@ std::string to_lower(const std::string& text) {
             std::tolower(static_cast<unsigned char>(character))));
     }
     return result;
+}
+
+const char* role_name(Role role) {
+    switch (role) {
+        case Role::Student:
+            return "student";
+        case Role::Teacher:
+            return "teacher";
+        case Role::Administrator:
+            return "administrator";
+    }
+    return "unknown";
 }
 
 std::string describe(const ClassMeeting& meeting) {
@@ -308,6 +321,45 @@ const Teacher* SystemContext::find_teacher_by_number(
         }
     }
     return nullptr;
+}
+
+bool SystemContext::find_account_owner(const std::string& number,
+                                      Role exclude_role, int exclude_id,
+                                      Role& owner,
+                                      std::string& owner_number) const {
+    const std::string target = to_lower(number);
+    for (const Student& student : students_) {
+        if (exclude_role == Role::Student && student.student_id == exclude_id) {
+            continue;
+        }
+        if (to_lower(student.student_number) == target) {
+            owner = Role::Student;
+            owner_number = student.student_number;
+            return true;
+        }
+    }
+    for (const Teacher& teacher : teachers_) {
+        if (exclude_role == Role::Teacher && teacher.teacher_id == exclude_id) {
+            continue;
+        }
+        if (to_lower(teacher.teacher_number) == target) {
+            owner = Role::Teacher;
+            owner_number = teacher.teacher_number;
+            return true;
+        }
+    }
+    for (const Administrator& administrator : administrators_) {
+        if (exclude_role == Role::Administrator &&
+            administrator.administrator_id == exclude_id) {
+            continue;
+        }
+        if (to_lower(administrator.account_number) == target) {
+            owner = Role::Administrator;
+            owner_number = administrator.account_number;
+            return true;
+        }
+    }
+    return false;
 }
 
 bool SystemContext::find_course(int course_id, Course& course) const {
@@ -1142,6 +1194,17 @@ OperationResult AdministratorService::create_student(
                 "student_number " + student.student_number +
                     " already exists"};
     }
+    // 跨角色查重：登录账号在学生、教师、管理员之间必须唯一。
+    Role owner{};
+    std::string owner_number;
+    if (context_.find_account_owner(student.student_number, Role::Student,
+                                    student.student_id, owner,
+                                    owner_number)) {
+        return {ResultCode::DuplicateIdentifier,
+                "student_number " + student.student_number +
+                    " is already used by " + role_name(owner) + " " +
+                    owner_number};
+    }
     context_.apply_student_change(student);
     return {ResultCode::Success,
             "student " + student.student_number + " created"};
@@ -1168,6 +1231,17 @@ OperationResult AdministratorService::update_student(
                 "student_number " + student.student_number +
                     " is used by student_id " +
                     std::to_string(by_number->student_id)};
+    }
+    // 跨角色查重：改成别的角色已在用的账号同样要拒绝，排除自身。
+    Role owner{};
+    std::string owner_number;
+    if (context_.find_account_owner(student.student_number, Role::Student,
+                                    student.student_id, owner,
+                                    owner_number)) {
+        return {ResultCode::DuplicateIdentifier,
+                "student_number " + student.student_number +
+                    " is already used by " + role_name(owner) + " " +
+                    owner_number};
     }
     context_.apply_student_change(student);
     return {ResultCode::Success,
@@ -1240,6 +1314,17 @@ OperationResult AdministratorService::create_teacher(
                 "teacher_number " + teacher.teacher_number +
                     " already exists"};
     }
+    // 跨角色查重：登录账号在学生、教师、管理员之间必须唯一。
+    Role owner{};
+    std::string owner_number;
+    if (context_.find_account_owner(teacher.teacher_number, Role::Teacher,
+                                    teacher.teacher_id, owner,
+                                    owner_number)) {
+        return {ResultCode::DuplicateIdentifier,
+                "teacher_number " + teacher.teacher_number +
+                    " is already used by " + role_name(owner) + " " +
+                    owner_number};
+    }
     context_.apply_teacher_change(teacher);
     return {ResultCode::Success,
             "teacher " + teacher.teacher_number + " created"};
@@ -1266,6 +1351,17 @@ OperationResult AdministratorService::update_teacher(
                 "teacher_number " + teacher.teacher_number +
                     " is used by teacher_id " +
                     std::to_string(by_number->teacher_id)};
+    }
+    // 跨角色查重：改成别的角色已在用的账号同样要拒绝，排除自身。
+    Role owner{};
+    std::string owner_number;
+    if (context_.find_account_owner(teacher.teacher_number, Role::Teacher,
+                                    teacher.teacher_id, owner,
+                                    owner_number)) {
+        return {ResultCode::DuplicateIdentifier,
+                "teacher_number " + teacher.teacher_number +
+                    " is already used by " + role_name(owner) + " " +
+                    owner_number};
     }
     context_.apply_teacher_change(teacher);
     return {ResultCode::Success,
@@ -1445,6 +1541,32 @@ OperationResult AdministratorService::check_data_integrity(
                         std::to_string(taken[right].teaching_class_id));
                 }
             }
+        }
+    }
+
+    // 跨角色账号查重：登录账号（学号 / 工号 / 管理员账号）全局唯一。
+    // 已有的重复数据（历史导入、早期版本写入）在这里一次性报出。
+    std::vector<std::pair<std::string, std::string>> accounts;
+    for (const Student& student : context_.students()) {
+        accounts.push_back({to_lower(student.student_number),
+                            "student " + student.student_number});
+    }
+    for (const Teacher& teacher : context_.teachers()) {
+        accounts.push_back({to_lower(teacher.teacher_number),
+                            "teacher " + teacher.teacher_number});
+    }
+    for (const Administrator& administrator : context_.administrators()) {
+        accounts.push_back({to_lower(administrator.account_number),
+                            "administrator " + administrator.account_number});
+    }
+    for (std::size_t left = 0; left < accounts.size(); ++left) {
+        for (std::size_t right = left + 1; right < accounts.size(); ++right) {
+            if (accounts[left].first != accounts[right].first) {
+                continue;
+            }
+            problems.push_back("account number " + accounts[left].second +
+                               " collides with " + accounts[right].second +
+                               "; login accounts must be unique across roles");
         }
     }
 
