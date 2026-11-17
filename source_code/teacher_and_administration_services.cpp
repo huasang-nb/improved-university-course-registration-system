@@ -113,6 +113,22 @@ const char* role_name(Role role) {
     return "unknown";
 }
 
+// 账号比较口径（与登录匹配、恢复校验必须一致）：
+// 去掉首尾空白 + 转小写后按整串比较，不做其它归一化。
+std::string account_key(const std::string& text) {
+    std::size_t begin = 0;
+    std::size_t end = text.size();
+    while (begin < end &&
+           std::isspace(static_cast<unsigned char>(text[begin])) != 0) {
+        ++begin;
+    }
+    while (end > begin &&
+           std::isspace(static_cast<unsigned char>(text[end - 1])) != 0) {
+        --end;
+    }
+    return to_lower(text.substr(begin, end - begin));
+}
+
 std::string describe(const ClassMeeting& meeting) {
     return "day " + std::to_string(meeting.day_of_week) + " " +
            std::to_string(meeting.start_minute) + "-" +
@@ -306,7 +322,7 @@ const Teacher* SystemContext::find_teacher(int teacher_id) const {
 const Student* SystemContext::find_student_by_number(
     const std::string& number) const {
     for (const Student& student : students_) {
-        if (to_lower(student.student_number) == to_lower(number)) {
+        if (account_key(student.student_number) == account_key(number)) {
             return &student;
         }
     }
@@ -316,7 +332,7 @@ const Student* SystemContext::find_student_by_number(
 const Teacher* SystemContext::find_teacher_by_number(
     const std::string& number) const {
     for (const Teacher& teacher : teachers_) {
-        if (to_lower(teacher.teacher_number) == to_lower(number)) {
+        if (account_key(teacher.teacher_number) == account_key(number)) {
             return &teacher;
         }
     }
@@ -327,12 +343,12 @@ bool SystemContext::find_account_owner(const std::string& number,
                                       Role exclude_role, int exclude_id,
                                       Role& owner,
                                       std::string& owner_number) const {
-    const std::string target = to_lower(number);
+    const std::string target = account_key(number);
     for (const Student& student : students_) {
         if (exclude_role == Role::Student && student.student_id == exclude_id) {
             continue;
         }
-        if (to_lower(student.student_number) == target) {
+        if (account_key(student.student_number) == target) {
             owner = Role::Student;
             owner_number = student.student_number;
             return true;
@@ -342,7 +358,7 @@ bool SystemContext::find_account_owner(const std::string& number,
         if (exclude_role == Role::Teacher && teacher.teacher_id == exclude_id) {
             continue;
         }
-        if (to_lower(teacher.teacher_number) == target) {
+        if (account_key(teacher.teacher_number) == target) {
             owner = Role::Teacher;
             owner_number = teacher.teacher_number;
             return true;
@@ -353,7 +369,7 @@ bool SystemContext::find_account_owner(const std::string& number,
             administrator.administrator_id == exclude_id) {
             continue;
         }
-        if (to_lower(administrator.account_number) == target) {
+        if (account_key(administrator.account_number) == target) {
             owner = Role::Administrator;
             owner_number = administrator.account_number;
             return true;
@@ -779,14 +795,50 @@ OperationResult AdministratorService::remove_course(const UserIdentity& user,
             ++referencing_classes;
         }
     }
-    if (referencing_classes > 0) {
+    if (referencing_classes == 0) {
+        context_.remove_course_record(course_id);
+        return {ResultCode::Success, "course " + existing.course_code + " removed"};
+    }
+
+    // 课程下还有教学班：只有在没有任何选退课记录时才连同教学班一起删除。
+    // 有记录（无论是 Active 还是只有 Dropped）都必须保留课程与班级的归属关系，
+    // 因为退课记录同样是历史，单纯"先退课"并不能让课程变成可删除。
+    std::vector<int> class_ids;
+    for (const TeachingClass& teaching_class : context_.teaching_classes()) {
+        if (teaching_class.course_id == course_id) {
+            class_ids.push_back(teaching_class.teaching_class_id);
+        }
+    }
+    int active = 0;
+    int dropped = 0;
+    for (const Enrollment& enrollment : context_.all_enrollments()) {
+        if (std::find(class_ids.begin(), class_ids.end(),
+                      enrollment.teaching_class_id) == class_ids.end()) {
+            continue;
+        }
+        if (enrollment.status == EnrollmentStatus::Active) {
+            ++active;
+        } else {
+            ++dropped;
+        }
+    }
+    if (active + dropped > 0) {
         return {ResultCode::CatalogInUse,
-                "course " + existing.course_code + " still has " +
-                    std::to_string(referencing_classes) +
-                    " teaching class(es); remove them first"};
+                "course " + existing.course_code + " has " +
+                    std::to_string(referencing_classes) + " teaching class(es) with " +
+                    std::to_string(active + dropped) + " enrollment record(s) (" +
+                    std::to_string(active) + " active, " + std::to_string(dropped) +
+                    " dropped) that must be kept for history; dropping the records "
+                    "does not make the course deletable"};
+    }
+
+    for (int teaching_class_id : class_ids) {
+        context_.remove_teaching_class_record(teaching_class_id);
     }
     context_.remove_course_record(course_id);
-    return {ResultCode::Success, "course " + existing.course_code + " removed"};
+    return {ResultCode::Success,
+            "course " + existing.course_code + " removed together with " +
+                std::to_string(referencing_classes) + " teaching class(es)"};
 }
 
 OperationResult AdministratorService::create_teaching_class(
@@ -894,14 +946,17 @@ OperationResult AdministratorService::update_teaching_class(
                 "teacher_id " + std::to_string(teaching_class.teacher_id) +
                     " not found"};
     }
-    // 与 create_teaching_class() 保持一致：停用账号不能被安排或改派教学班。
-    // 在写入之前返回，因此原任课教师保持不变。
-    if (!teacher->account_active) {
+    // 与 create_teaching_class() 保持一致：停用账号不能被**安排或改派**教学班。
+    // 只在"换人"时拦截；原班教师被停用后，管理员能否继续改该班的时间与容量
+    // 属于另一个待确认问题，这里不扩大限制（保持改动前的行为：允许）。
+    if (teaching_class.teacher_id != existing.teacher_id &&
+        !teacher->account_active) {
         const Teacher* current = context_.find_teacher(existing.teacher_id);
         return {ResultCode::InvalidInput,
                 "teacher " + teacher->teacher_number +
-                    " is not an active account; teaching class " +
-                    std::to_string(existing.teaching_class_id) + " keeps " +
+                    " is not an active account and cannot be assigned to teaching "
+                    "class " +
+                    std::to_string(existing.teaching_class_id) + "; it keeps " +
                     (current == nullptr ? std::string("its current teacher")
                                         : current->teacher_number)};
     }
@@ -1548,15 +1603,15 @@ OperationResult AdministratorService::check_data_integrity(
     // 已有的重复数据（历史导入、早期版本写入）在这里一次性报出。
     std::vector<std::pair<std::string, std::string>> accounts;
     for (const Student& student : context_.students()) {
-        accounts.push_back({to_lower(student.student_number),
+        accounts.push_back({account_key(student.student_number),
                             "student " + student.student_number});
     }
     for (const Teacher& teacher : context_.teachers()) {
-        accounts.push_back({to_lower(teacher.teacher_number),
+        accounts.push_back({account_key(teacher.teacher_number),
                             "teacher " + teacher.teacher_number});
     }
     for (const Administrator& administrator : context_.administrators()) {
-        accounts.push_back({to_lower(administrator.account_number),
+        accounts.push_back({account_key(administrator.account_number),
                             "administrator " + administrator.account_number});
     }
     for (std::size_t left = 0; left < accounts.size(); ++left) {

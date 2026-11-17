@@ -73,25 +73,30 @@ OperationResult create_course_with_teaching_class(
 
 ## 3. 课程删除的死锁与建议
 
-**建议：删课程走级联，删班仍禁止动最后一个班** —— 两者管的不是同一件事。
+**状态：已按确认方案实现（2026-11-17）。**
+
+规则：删课程走级联，删班仍禁止动最后一个班 —— 两者管的不是同一件事。
 
 | 情形 | 处理 | 返回 |
 |---|---|---|
-| 课程下没有任何选退课记录 | 允许：一次事务内删课程 + 其全部教学班 | `Success`，消息写明"已连同 N 个教学班删除" |
-| 记录全部为 Dropped | 拒绝（历史必须保留） | `CatalogInUse`，消息给出 active / dropped 条数 |
-| 存在 Active 记录 | 拒绝 | `CatalogInUse`，提示先让学生退课 |
+| 课程下没有任何选退课记录 | 允许：删课程 + 其全部教学班 | `Success`，消息为 `removed together with N teaching class(es)` |
+| 记录全部为 Dropped | 拒绝（历史必须保留） | `CatalogInUse`，消息给出 `(0 active, N dropped)` 并说明 "dropping the records does not make the course deletable" |
+| 存在 Active 记录 | 拒绝 | `CatalogInUse`，同样给出 active / dropped 条数 |
 | 课程本来没有教学班（历史脏数据） | 允许直接删 | `Success` |
 
 实现要点：`remove_course()` 先统计该课程的班数；为 0 直接删；大于 0 时用 `all_enrollments()`
 判断这些班是否有记录，没有才逐个 `remove_teaching_class_record()` 再 `remove_course_record()`。
 `remove_teaching_class()` 的"最后一个班不可删"规则保持不变。
 
+> 拒绝提示刻意不写成"请先退课"：退课之后记录变成 Dropped，课程依然不可删，
+> 提示必须让调用方知道这一点。
+
 备选：新增"停用课程"标志代替物理删除。这属于新增需求，本版不建议引入。
 
 ## 4. 跨角色账号查重：已实现（2026-11-17）
 
-**更新：本节原为"待实施"，现已落地。** 实现见提交 `c0ffee1`（后续提交号以实际为准），
-入口 `SystemContext::find_account_owner()`。
+**更新：本节原为"待实施"，现已落地。** 跨角色查重见提交 `667b57e`，
+删除级联与停用教师口径见提交 `7af6605`，入口 `SystemContext::find_account_owner()`。
 
 **改动前**：只做到各自角色内（student_number 只在学生里查，teacher_number 只在教师里查）。
 
@@ -105,13 +110,34 @@ OperationResult create_course_with_teaching_class(
 | `check_data_integrity` | **新增**"account number X collides with Y"问题项，可检查历史重名 |
 | 管理员账号 | 参与查重（读取 `administrators_`）；但仍**没有维护接口**，只能由种子数据/导入产生 |
 
-- 账号比较**大小写不敏感**（`T2015007` 与 `t2015007` 视为同一账号）。
+- 账号比较口径（**三处必须一致**：维护入口、Kai 的恢复校验、Yuhua 的登录匹配）：
+  **去掉首尾空白 → 转小写 → 整串相等**，不做其它归一化。实现集中在 `account_key()`，
+  `find_student_by_number` / `find_teacher_by_number` / `find_account_owner` /
+  一致性检查都走它。
+- 修改时**只排除被修改的那一个对象**（按 角色 + id 精确排除），不排除整个角色。
 - 冲突统一返回 `DuplicateIdentifier`，消息形如
   `student_number T2015007 is already used by teacher T2015007`。
 
 登录侧（Yuhua）：登录时按账号在三种角色里查，命中多条应报数据错误，不要静默取第一条。
 
-**内部数字 ID**：继续待确认。若要求全局唯一，需统一 ID 空间与生成规则，属于另一件改动。
+**内部数字 ID**：继续待确认。若要求全局唯一，需统一 ID 空间与生成规则，属于另一件改动，
+本次未重构。
+
+## 4.1 仍待接口对齐的两项
+
+1. **「课程 + 首个教学班」原子创建**：等三人确认 `create_course_with_teaching_class()` 的签名后再实现。
+   同时要**真正收口旧入口**，不能只写注释：计划是新增导入专用入口
+   `restore_courses()`（仅由存储恢复调用），把 `create_course()` 从公开接口移除；
+   现有 3 处直接调用 `create_course()` 的测试会一起改。
+2. **管理员修改接入持久化**：等 Kai 的保存接口稳定。执行方式为
+   "在临时副本上执行 → 保存成功后再替换共享状态 → 保存失败则原数据不变"，
+   即对 `SystemContext` 做 copy-on-write，而不是就地修改。
+
+## 4.2 停用教师与已有教学班（待确认）
+
+原班教师被停用后，管理员能否继续改该班的时间与容量：**未确认**。
+当前实现按"不扩大限制"处理——只在**改派给另一位停用教师**时拒绝，
+原教师不变时允许改时间/容量（`test_inactive_teacher_class_can_still_be_edited` 固定该行为）。
 
 ## 5. 分支、测试与配合事项
 
