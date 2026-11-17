@@ -1055,11 +1055,13 @@ OperationResult initialize_storage(const StorageOptions& options,
     if (std::filesystem::exists(options.path, ec)) {
         return load_state(options, out_context);
     }
-    out_context = make_seed_context();
-    const OperationResult saved = save_state(out_context, options);
+    // 先写盘成功，再替换 out_context：失败时调用方的状态保持不变。
+    SystemContext seeded = make_seed_context();
+    const OperationResult saved = save_state(seeded, options);
     if (saved.code != ResultCode::Success) {
         return saved;
     }
+    out_context = std::move(seeded);
     return {ResultCode::Success,
             "initialized " + options.path + " with seed data"};
 }
