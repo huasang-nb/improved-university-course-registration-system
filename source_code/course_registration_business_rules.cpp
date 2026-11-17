@@ -224,4 +224,11 @@ void RegistrationService::apply_rule_change(const RegistrationRule& rule) {
     rule_ = rule;
 }
 
+// [Zhang Yikai 追加，待 Zhang Yuhua 复核] 持久化恢复：直接替换原始记录，
+// 不重放 enroll() 的业务检查。调用方（persistence 层）在载入前已完成校验。
+void RegistrationService::restore_enrollments(
+    std::vector<Enrollment> enrollments) {
+    enrollments_ = std::move(enrollments);
+}
+
 }  // namespace course_registration

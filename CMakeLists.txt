@@ -65,3 +65,26 @@ if (MSVC)
 else()
     target_compile_options(student_query_and_timetable_services PRIVATE -Wall -Wextra)
 endif()
+
+# ---------------------------------------------------------------------------
+# [Zhang Yikai 追加，待 Zhang Yuhua 复核] 持久化模块（JSON 快照）。
+# 只新增目标，不改动上面的目标名称与依赖。
+# ---------------------------------------------------------------------------
+add_library(persistence_service
+    source_code/persistence_service.cpp)
+target_link_libraries(persistence_service
+    PUBLIC teacher_and_administration_services)
+target_include_directories(persistence_service
+    PUBLIC header_files)
+
+add_executable(persistence_tests
+    automated_tests/persistence_tests.cpp)
+target_link_libraries(persistence_tests
+    PRIVATE persistence_service)
+add_test(NAME persistence COMMAND persistence_tests)
+
+if (MSVC)
+    target_compile_options(persistence_service PRIVATE /W4)
+else()
+    target_compile_options(persistence_service PRIVATE -Wall -Wextra)
+endif()

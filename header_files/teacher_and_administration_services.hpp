@@ -190,6 +190,12 @@ public:
     // 一旦为 true 就保持 true，用于锁住学分上限，避免"先关闭、改上限、再开放"绕过限制。
     bool observe_registration_round();
 
+    // ---- [Zhang Yikai 追加，待 Zhang Yuhua 复核] 持久化需要读取/恢复这个历史事实 ----
+    // round_opened() 只读，不触发"观察当前时间"的副作用；
+    // restore_round_opened() 只在持久化载入时调用，把文件里的事实写回。
+    bool round_opened() const;
+    void restore_round_opened(bool opened);
+
 private:
     std::vector<Student> students_;
     std::vector<Teacher> teachers_;

@@ -48,6 +48,13 @@ $targets = @(
                     "source_code/teacher_and_administration_services.cpp",
                     "source_code/student_query_and_timetable_services.cpp",
                     "source_code/student_query_demonstration.cpp")
+    },
+    @{
+        Name = "persistence_tests"
+        Sources = @("source_code/course_registration_business_rules.cpp",
+                    "source_code/teacher_and_administration_services.cpp",
+                    "source_code/persistence_service.cpp",
+                    "automated_tests/persistence_tests.cpp")
     }
 )
 
@@ -66,7 +73,8 @@ foreach ($target in $targets) {
 
 $tests = @("course_registration_business_rules_tests",
            "teacher_and_administration_services_tests",
-           "student_query_and_timetable_tests")
+           "student_query_and_timetable_tests",
+           "persistence_tests")
 foreach ($test in $tests) {
     $exe = Join-Path $build ($test + ".exe")
     if (-not (Test-Path $exe)) { continue }

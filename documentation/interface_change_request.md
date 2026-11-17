@@ -146,3 +146,52 @@
   "本轮是否开放过"记在 `SystemContext` 的 `round_opened_` 里（观察到的历史事实，不清零），
   没有往共享的 `RegistrationRule` 再加字段；如果你们希望把这个状态放进规则对象一起持久化，
   我再改成结构体字段的方案。
+
+
+## 七、持久化模块的共享头文件改动（Zhang Yikai → Zhang Yuhua / Zhu Ziliang 复核）
+
+模块入口：`header_files/persistence_service.hpp`、`source_code/persistence_service.cpp`、
+`automated_tests/persistence_tests.cpp`、`documentation/persistence_design.md`。
+分支：`feature/yikai-persistence`。
+
+### 1. `ResultCode` 末尾追加 5 个失败原因
+
+```cpp
+     CatalogInUse,           // 原最后一项
++    StorageIoError,
++    StorageParseError,
++    StorageSchemaMismatch,
++    StorageIntegrityError,
++    StorageBackupMissing
+ };
+```
+
+加在末尾，已有枚举值的编号不变；不追加就只能另立错误枚举，违反统一 `OperationResult`
+的约定。
+
+### 2. `RegistrationService` 追加恢复入口
+
+```cpp
++    // 载入时直接恢复原始选课记录，跳过 enroll() 的业务检查。
++    void restore_enrollments(std::vector<Enrollment> enrollments);
+```
+
+只允许持久化层在 load/restore 时调用。**不新增**任何"绕过检查"的常规写入路径；
+`enroll()` / `drop()` / `remaining_seats()` / `enrollment_count()` 的函数体一字未改。
+
+### 3. `SystemContext` 追加读取/恢复 `round_opened_`
+
+```cpp
++    bool round_opened() const;               // 只读，不触发 observe 的副作用
++    void restore_round_opened(bool opened);  // 持久化载入时写回
+```
+
+缺陷-010 引入的 `round_opened_` 原来只能由 `observe_registration_round()` 置 true，
+没有 setter，文件里的事实载入不回来；这里补一个只读 getter 和一个恢复 setter。
+
+### 复核清单
+
+- [ ] 同意 `ResultCode` 追加 5 个存储错误码。
+- [ ] 同意 `restore_enrollments` 只给持久化层使用（头文件注释已写明）。
+- [ ] 同意 `round_opened()` / `restore_round_opened(bool)` 的命名与语义。
+- [ ] 确认 `.\build_and_test.ps1` 在最新分支上仍是 `ALL BUILD AND TESTS PASSED`。

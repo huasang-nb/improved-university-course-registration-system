@@ -458,6 +458,14 @@ bool SystemContext::observe_registration_round() {
     return round_opened_;
 }
 
+// [Zhang Yikai 追加，待 Zhang Yuhua 复核] 持久化：只读历史事实，不观察当前时间。
+bool SystemContext::round_opened() const { return round_opened_; }
+
+// [Zhang Yikai 追加，待 Zhang Yuhua 复核] 持久化：把文件里的历史事实写回。
+void SystemContext::restore_round_opened(bool opened) {
+    round_opened_ = opened;
+}
+
 // ===========================================================================
 // TeacherService
 // ===========================================================================
