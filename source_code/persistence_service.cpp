@@ -2,13 +2,15 @@
 // 持久化实现（Zhang Yikai）
 //
 // 设计：一个 state.json 快照 + .tmp / .bak 两份辅助文件。
-//   - 写：序列化 -> 写 .tmp -> 备份旧文件为 .bak -> 原子替换（Windows 用
-//     MoveFileEx(REPLACE_EXISTING)，其他平台用 filesystem::rename）。
-//   - 读：解析 -> 校验（schema / 引用 / 唯一性）-> 才替换 out_context。
+//   - 保存：observe_registration_round() -> validate_state() -> 序列化 ->
+//     写 .tmp -> （主文件仍有效时）备份为 .bak -> 原子替换。
+//   - 恢复：读 .bak -> 解析 -> 校验 -> 写 .tmp -> 原子替换主文件；**不覆盖 .bak**，
+//     所以恢复失败后可以重试，始终保留一份有效数据。
 //   - 失败：不碰内存、不删原文件，返回带原因的 OperationResult。
 //
 // 为了不引入第三方依赖，这里带一个只够本文件使用的 JSON 读写子集：
-// 对象、数组、字符串、整数、布尔、null；字符串支持 \" \\ \n \r \t \b \f \uXXXX。
+// 对象、数组、字符串、整数、布尔、null；字符串支持 \" \\ \n \r \t \b \f
+// 与 \uXXXX（含 UTF-16 代理对）。
 // ============================================================================
 
 #include "persistence_service.hpp"
@@ -17,6 +19,8 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <limits>
+#include <map>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -69,14 +73,20 @@ int hex_digit(char c) {
     return -1;
 }
 
+// 编码一个 Unicode 码点（含 BMP 之外、需要 4 字节的码点）。
 void append_utf8(std::string& out, unsigned code) {
     if (code <= 0x7F) {
         out.push_back(static_cast<char>(code));
     } else if (code <= 0x7FF) {
         out.push_back(static_cast<char>(0xC0 | (code >> 6)));
         out.push_back(static_cast<char>(0x80 | (code & 0x3F)));
-    } else {
+    } else if (code <= 0xFFFF) {
         out.push_back(static_cast<char>(0xE0 | (code >> 12)));
+        out.push_back(static_cast<char>(0x80 | ((code >> 6) & 0x3F)));
+        out.push_back(static_cast<char>(0x80 | (code & 0x3F)));
+    } else {
+        out.push_back(static_cast<char>(0xF0 | (code >> 18)));
+        out.push_back(static_cast<char>(0x80 | ((code >> 12) & 0x3F)));
         out.push_back(static_cast<char>(0x80 | ((code >> 6) & 0x3F)));
         out.push_back(static_cast<char>(0x80 | (code & 0x3F)));
     }
@@ -121,6 +131,21 @@ private:
                 break;
             }
         }
+    }
+
+    bool read_hex4(size_t offset, unsigned& code) {
+        if (offset + 4 > text_.size()) {
+            return false;
+        }
+        code = 0;
+        for (int k = 0; k < 4; ++k) {
+            const int digit = hex_digit(text_[offset + static_cast<size_t>(k)]);
+            if (digit < 0) {
+                return false;
+            }
+            code = code * 16u + static_cast<unsigned>(digit);
+        }
+        return true;
     }
 
     bool parse_value(JsonValue& out) {
@@ -207,11 +232,17 @@ private:
                 return true;
             }
             if (c == '\\') {
-                ++pos_;
+                ++pos_;  // 越过反斜杠，指向转义字符
                 if (pos_ >= text_.size()) {
                     return fail("unterminated escape");
                 }
                 const char e = text_[pos_];
+                if (e == 'u') {
+                    if (!parse_unicode_escape(out)) {
+                        return false;
+                    }
+                    continue;  // parse_unicode_escape 已经推进 pos_
+                }
                 switch (e) {
                     case '"': out.push_back('"'); break;
                     case '\\': out.push_back('\\'); break;
@@ -221,32 +252,47 @@ private:
                     case 'n': out.push_back('\n'); break;
                     case 'r': out.push_back('\r'); break;
                     case 't': out.push_back('\t'); break;
-                    case 'u': {
-                        if (pos_ + 4 >= text_.size()) {
-                            return fail("short \\u escape");
-                        }
-                        unsigned code = 0;
-                        for (int k = 1; k <= 4; ++k) {
-                            const int digit = hex_digit(text_[pos_ + k]);
-                            if (digit < 0) {
-                                return fail("invalid \\u escape");
-                            }
-                            code = code * 16u + static_cast<unsigned>(digit);
-                        }
-                        append_utf8(out, code);
-                        pos_ += 4;
-                        break;
-                    }
                     default:
                         return fail("unknown escape");
                 }
-                ++pos_;
+                ++pos_;  // 越过转义字符
             } else {
                 out.push_back(c);
                 ++pos_;
             }
         }
         return fail("unterminated string");
+    }
+
+    // 处理 \uXXXX；遇到高位代理时组合后面的 \uXXXX 低位代理。
+    bool parse_unicode_escape(std::string& out) {
+        // pos_ 指向 'u'，4 个十六进制位在其后。
+        unsigned code = 0;
+        if (!read_hex4(pos_ + 1, code)) {
+            return fail("invalid \\u escape");
+        }
+        pos_ += 5;  // 越过 'u' 与 4 位十六进制
+
+        if (code >= 0xD800u && code <= 0xDBFFu) {
+            // 高位代理：后面必须是 \uDC00-\uDFFF。
+            if (pos_ + 1 >= text_.size() || text_[pos_] != '\\' ||
+                text_[pos_ + 1] != 'u') {
+                return fail("missing low surrogate");
+            }
+            unsigned low = 0;
+            if (!read_hex4(pos_ + 2, low)) {
+                return fail("invalid low surrogate escape");
+            }
+            if (low < 0xDC00u || low > 0xDFFFu) {
+                return fail("invalid low surrogate");
+            }
+            code = 0x10000u + ((code - 0xD800u) << 10) + (low - 0xDC00u);
+            pos_ += 6;  // 越过 '\' 'u' 与 4 位十六进制
+        } else if (code >= 0xDC00u && code <= 0xDFFFu) {
+            return fail("lone low surrogate");
+        }
+        append_utf8(out, code);
+        return true;
     }
 
     bool parse_array(JsonValue& out) {
@@ -530,6 +576,11 @@ bool as_int(const JsonValue* value, int& out, const std::string& field,
         error = "field " + field + " must be an integer";
         return false;
     }
+    if (value->integer < static_cast<long long>(std::numeric_limits<int>::min()) ||
+        value->integer > static_cast<long long>(std::numeric_limits<int>::max())) {
+        error = "field " + field + " is out of int range";
+        return false;
+    }
     out = static_cast<int>(value->integer);
     return true;
 }
@@ -579,7 +630,295 @@ bool contains_key(const std::vector<std::string>& keys, const std::string& key) 
     return false;
 }
 
-// 把根节点解析成 SystemContext；只在全部校验通过后才写 out。
+}  // namespace
+
+// ---------------------------------------------------------------------------
+// 业务约束校验（公开入口）
+// ---------------------------------------------------------------------------
+
+OperationResult validate_state(const SystemContext& context,
+                               std::vector<std::string>& problems) {
+    problems.clear();
+
+    const std::vector<Course> courses = context.courses();
+    const std::vector<TeachingClass> classes = context.teaching_classes();
+    const std::vector<Student>& students = context.students();
+    const std::vector<Teacher>& teachers = context.teachers();
+    const std::vector<Administrator>& administrators = context.administrators();
+    const std::vector<Enrollment> enrollments = context.all_enrollments();
+    const RegistrationRule rule = context.rule();
+
+    auto add = [&problems](const std::string& text) {
+        problems.push_back(text);
+    };
+
+    // ---- 1. 课程 / 教学班结构 ----
+    for (const Course& course : courses) {
+        bool has_class = false;
+        for (const TeachingClass& item : classes) {
+            if (item.course_id == course.course_id) {
+                has_class = true;
+                break;
+            }
+        }
+        if (!has_class) {
+            add("course " + std::to_string(course.course_id) +
+                " has no teaching class");
+        }
+    }
+    for (const TeachingClass& item : classes) {
+        const std::string label =
+            "teaching class " + std::to_string(item.teaching_class_id);
+        if (item.capacity < 0) {
+            add(label + " has negative capacity");
+        }
+        if (item.meetings.empty()) {
+            add(label + " has no meeting");
+        }
+        for (const ClassMeeting& meeting : item.meetings) {
+            if (meeting.day_of_week < 1 || meeting.day_of_week > 7) {
+                add(label + " has an invalid day_of_week");
+            }
+            if (meeting.start_minute < 0 ||
+                meeting.end_minute > 24 * 60 ||
+                meeting.start_minute >= meeting.end_minute) {
+                add(label + " has an invalid meeting time");
+            }
+        }
+    }
+
+    // ---- 1b. 内部数字 ID：各自集合内唯一（不要求跨角色全局唯一）----
+    {
+        std::vector<std::string> seen_courses;
+        for (const Course& item : courses) {
+            const std::string key = std::to_string(item.course_id);
+            if (contains_key(seen_courses, key)) {
+                add("duplicate course_id " + key);
+            } else {
+                seen_courses.push_back(key);
+            }
+        }
+        std::vector<std::string> seen_classes;
+        for (const TeachingClass& item : classes) {
+            const std::string key = std::to_string(item.teaching_class_id);
+            if (contains_key(seen_classes, key)) {
+                add("duplicate teaching_class_id " + key);
+            } else {
+                seen_classes.push_back(key);
+            }
+        }
+        std::vector<std::string> seen_students;
+        for (const Student& item : students) {
+            const std::string key = std::to_string(item.student_id);
+            if (contains_key(seen_students, key)) {
+                add("duplicate student_id " + key);
+            } else {
+                seen_students.push_back(key);
+            }
+        }
+        std::vector<std::string> seen_teachers;
+        for (const Teacher& item : teachers) {
+            const std::string key = std::to_string(item.teacher_id);
+            if (contains_key(seen_teachers, key)) {
+                add("duplicate teacher_id " + key);
+            } else {
+                seen_teachers.push_back(key);
+            }
+        }
+        std::vector<std::string> seen_admins;
+        for (const Administrator& item : administrators) {
+            const std::string key = std::to_string(item.administrator_id);
+            if (contains_key(seen_admins, key)) {
+                add("duplicate administrator_id " + key);
+            } else {
+                seen_admins.push_back(key);
+            }
+        }
+    }
+
+    // ---- 2. 账号唯一性：角色内 + 跨角色（数字 ID 不要求跨角色唯一）----
+    std::map<std::string, std::string> accounts;
+    auto insert_account = [&](const std::string& number,
+                              const std::string& role) {
+        const std::string key = lower_copy(number);
+        const auto found = accounts.find(key);
+        if (found != accounts.end()) {
+            add("duplicate account " + number + " (" + found->second + " and " +
+                role + ")");
+        } else {
+            accounts.emplace(key, role);
+        }
+    };
+    for (const Student& item : students) {
+        insert_account(item.student_number, "student");
+    }
+    for (const Teacher& item : teachers) {
+        insert_account(item.teacher_number, "teacher");
+    }
+    for (const Administrator& item : administrators) {
+        insert_account(item.account_number, "administrator");
+    }
+
+    // ---- 3. 引用完整性 ----
+    std::vector<std::string> course_ids;
+    for (const Course& item : courses) {
+        course_ids.push_back(std::to_string(item.course_id));
+    }
+    std::vector<std::string> class_ids;
+    for (const TeachingClass& item : classes) {
+        class_ids.push_back(std::to_string(item.teaching_class_id));
+    }
+    std::vector<std::string> student_ids;
+    for (const Student& item : students) {
+        student_ids.push_back(std::to_string(item.student_id));
+    }
+    std::vector<std::string> teacher_ids;
+    for (const Teacher& item : teachers) {
+        teacher_ids.push_back(std::to_string(item.teacher_id));
+    }
+    for (const TeachingClass& item : classes) {
+        if (!contains_key(course_ids, std::to_string(item.course_id))) {
+            add("teaching class " + std::to_string(item.teaching_class_id) +
+                " refers to unknown course " + std::to_string(item.course_id));
+        }
+        if (!contains_key(teacher_ids, std::to_string(item.teacher_id))) {
+            add("teaching class " + std::to_string(item.teaching_class_id) +
+                " refers to unknown teacher " +
+                std::to_string(item.teacher_id));
+        }
+    }
+    for (const Enrollment& item : enrollments) {
+        if (!contains_key(student_ids, std::to_string(item.student_id))) {
+            add("enrollment refers to unknown student " +
+                std::to_string(item.student_id));
+        }
+        if (!contains_key(class_ids, std::to_string(item.teaching_class_id))) {
+            add("enrollment refers to unknown teaching class " +
+                std::to_string(item.teaching_class_id));
+        }
+    }
+
+    // ---- 4. 有效选课不超容量 ----
+    for (const TeachingClass& item : classes) {
+        int active = 0;
+        for (const Enrollment& enrollment : enrollments) {
+            if (enrollment.teaching_class_id == item.teaching_class_id &&
+                enrollment.status == EnrollmentStatus::Active) {
+                ++active;
+            }
+        }
+        if (active > item.capacity) {
+            add("teaching class " + std::to_string(item.teaching_class_id) +
+                " has " + std::to_string(active) +
+                " active enrollments but capacity " +
+                std::to_string(item.capacity));
+        }
+    }
+
+    // ---- 5. 同一学生同一教学班不能有多个 active ----
+    for (size_t i = 0; i < enrollments.size(); ++i) {
+        if (enrollments[i].status != EnrollmentStatus::Active) {
+            continue;
+        }
+        for (size_t j = i + 1; j < enrollments.size(); ++j) {
+            if (enrollments[j].status == EnrollmentStatus::Active &&
+                enrollments[i].student_id == enrollments[j].student_id &&
+                enrollments[i].teaching_class_id ==
+                    enrollments[j].teaching_class_id) {
+                add("duplicate active enrollment for student " +
+                    std::to_string(enrollments[i].student_id) +
+                    " in teaching class " +
+                    std::to_string(enrollments[i].teaching_class_id));
+            }
+        }
+    }
+
+    // ---- 6. 每个学生：时间冲突 + 学分上限 ----
+    auto find_class = [&classes](int id) -> const TeachingClass* {
+        for (const TeachingClass& item : classes) {
+            if (item.teaching_class_id == id) {
+                return &item;
+            }
+        }
+        return nullptr;
+    };
+    auto find_course = [&courses](int id) -> const Course* {
+        for (const Course& item : courses) {
+            if (item.course_id == id) {
+                return &item;
+            }
+        }
+        return nullptr;
+    };
+
+    for (const Student& student : students) {
+        std::vector<const TeachingClass*> active_classes;
+        for (const Enrollment& enrollment : enrollments) {
+            if (enrollment.student_id != student.student_id ||
+                enrollment.status != EnrollmentStatus::Active) {
+                continue;
+            }
+            const TeachingClass* item =
+                find_class(enrollment.teaching_class_id);
+            if (item != nullptr) {
+                active_classes.push_back(item);
+            }
+        }
+
+        for (size_t i = 0; i < active_classes.size(); ++i) {
+            for (size_t j = i + 1; j < active_classes.size(); ++j) {
+                // 同一教学班重复出现由第 5 条负责，这里跳过。
+                if (active_classes[i] == active_classes[j]) {
+                    continue;
+                }
+                bool conflict = false;
+                for (const ClassMeeting& a : active_classes[i]->meetings) {
+                    for (const ClassMeeting& b : active_classes[j]->meetings) {
+                        if (a.day_of_week == b.day_of_week &&
+                            a.start_minute < b.end_minute &&
+                            b.start_minute < a.end_minute) {
+                            conflict = true;
+                        }
+                    }
+                }
+                if (conflict) {
+                    add("student " + std::to_string(student.student_id) +
+                        " has a time conflict between teaching classes " +
+                        std::to_string(active_classes[i]->teaching_class_id) +
+                        " and " +
+                        std::to_string(active_classes[j]->teaching_class_id));
+                }
+            }
+        }
+
+        int credits = 0;
+        for (const TeachingClass* item : active_classes) {
+            const Course* course = find_course(item->course_id);
+            if (course != nullptr) {
+                credits += course->credits;
+            }
+        }
+        if (credits > rule.maximum_credits) {
+            add("student " + std::to_string(student.student_id) + " has " +
+                std::to_string(credits) +
+                " credits, above the limit " +
+                std::to_string(rule.maximum_credits));
+        }
+    }
+
+    if (!problems.empty()) {
+        return {ResultCode::StorageIntegrityError,
+                "state violates business rules"};
+    }
+    return {ResultCode::Success, "state is consistent"};
+}
+
+namespace {
+
+// ---------------------------------------------------------------------------
+// JSON -> SystemContext（结构性解析；业务约束交给 validate_state）
+// ---------------------------------------------------------------------------
+
 bool build_context_from_json(const JsonValue& root, SystemContext& out,
                              std::string& error) {
     if (root.type != JsonValue::Type::Object) {
@@ -606,18 +945,12 @@ bool build_context_from_json(const JsonValue& root, SystemContext& out,
     }
     RegistrationRule rule{false, 0, "", ""};
     if (!as_bool(rule_value->find("registration_open"), rule.registration_open,
-                 "registration_open", error)) {
-        return false;
-    }
-    if (!as_int(rule_value->find("maximum_credits"), rule.maximum_credits,
-                "maximum_credits", error)) {
-        return false;
-    }
-    if (!as_string(rule_value->find("opens_at"), rule.opens_at, "opens_at",
-                   error)) {
-        return false;
-    }
-    if (!as_string(rule_value->find("closes_at"), rule.closes_at, "closes_at",
+                 "registration_open", error) ||
+        !as_int(rule_value->find("maximum_credits"), rule.maximum_credits,
+                "maximum_credits", error) ||
+        !as_string(rule_value->find("opens_at"), rule.opens_at, "opens_at",
+                   error) ||
+        !as_string(rule_value->find("closes_at"), rule.closes_at, "closes_at",
                    error)) {
         return false;
     }
@@ -696,21 +1029,8 @@ bool build_context_from_json(const JsonValue& root, SystemContext& out,
                                error)) {
                     return false;
                 }
-                if (meeting.day_of_week < 1 || meeting.day_of_week > 7 ||
-                    meeting.start_minute < 0 ||
-                    meeting.end_minute > 24 * 60 ||
-                    meeting.start_minute >= meeting.end_minute) {
-                    error = "invalid meeting time in teaching class " +
-                            std::to_string(entry.teaching_class_id);
-                    return false;
-                }
                 entry.meetings.push_back(std::move(meeting));
             }
-        }
-        if (entry.capacity < 0) {
-            error = "negative capacity in teaching class " +
-                    std::to_string(entry.teaching_class_id);
-            return false;
         }
         classes.push_back(std::move(entry));
     }
@@ -811,109 +1131,19 @@ bool build_context_from_json(const JsonValue& root, SystemContext& out,
         enrollments.push_back(std::move(enrollment));
     }
 
-    // ---- 唯一性 ----
-    std::vector<std::string> course_ids;
-    for (const Course& course : courses) {
-        const std::string key = std::to_string(course.course_id);
-        if (contains_key(course_ids, key)) {
-            error = "duplicate course_id " + key;
-            return false;
-        }
-        course_ids.push_back(key);
-    }
-    std::vector<std::string> class_ids;
-    for (const TeachingClass& item : classes) {
-        const std::string key = std::to_string(item.teaching_class_id);
-        if (contains_key(class_ids, key)) {
-            error = "duplicate teaching_class_id " + key;
-            return false;
-        }
-        class_ids.push_back(key);
-    }
-    std::vector<std::string> student_ids;
-    std::vector<std::string> student_numbers;
-    for (const Student& item : students) {
-        const std::string id = std::to_string(item.student_id);
-        const std::string number = lower_copy(item.student_number);
-        if (contains_key(student_ids, id)) {
-            error = "duplicate student_id " + id;
-            return false;
-        }
-        if (contains_key(student_numbers, number)) {
-            error = "duplicate student_number " + item.student_number;
-            return false;
-        }
-        student_ids.push_back(id);
-        student_numbers.push_back(number);
-    }
-    std::vector<std::string> teacher_ids;
-    std::vector<std::string> teacher_numbers;
-    for (const Teacher& item : teachers) {
-        const std::string id = std::to_string(item.teacher_id);
-        const std::string number = lower_copy(item.teacher_number);
-        if (contains_key(teacher_ids, id)) {
-            error = "duplicate teacher_id " + id;
-            return false;
-        }
-        if (contains_key(teacher_numbers, number)) {
-            error = "duplicate teacher_number " + item.teacher_number;
-            return false;
-        }
-        teacher_ids.push_back(id);
-        teacher_numbers.push_back(number);
-    }
-    std::vector<std::string> admin_ids;
-    std::vector<std::string> admin_numbers;
-    for (const Administrator& item : administrators) {
-        const std::string id = std::to_string(item.administrator_id);
-        const std::string number = lower_copy(item.account_number);
-        if (contains_key(admin_ids, id)) {
-            error = "duplicate administrator_id " + id;
-            return false;
-        }
-        if (contains_key(admin_numbers, number)) {
-            error = "duplicate account_number " + item.account_number;
-            return false;
-        }
-        admin_ids.push_back(id);
-        admin_numbers.push_back(number);
-    }
-
-    // ---- 引用完整性 ----
-    for (const TeachingClass& item : classes) {
-        if (!contains_key(course_ids, std::to_string(item.course_id))) {
-            error = "teaching class " +
-                    std::to_string(item.teaching_class_id) +
-                    " refers to unknown course " +
-                    std::to_string(item.course_id);
-            return false;
-        }
-        if (!contains_key(teacher_ids, std::to_string(item.teacher_id))) {
-            error = "teaching class " +
-                    std::to_string(item.teaching_class_id) +
-                    " refers to unknown teacher " +
-                    std::to_string(item.teacher_id);
-            return false;
-        }
-    }
-    for (const Enrollment& item : enrollments) {
-        if (!contains_key(student_ids, std::to_string(item.student_id))) {
-            error = "enrollment refers to unknown student " +
-                    std::to_string(item.student_id);
-            return false;
-        }
-        if (!contains_key(class_ids, std::to_string(item.teaching_class_id))) {
-            error = "enrollment refers to unknown teaching class " +
-                    std::to_string(item.teaching_class_id);
-            return false;
-        }
-    }
-
-    // 全部通过后才构造并替换。
+    // 先构造，再整体校验；全部通过才替换 out。
     SystemContext parsed(students, teachers, administrators, courses, classes,
                          rule);
     parsed.registration().restore_enrollments(std::move(enrollments));
     parsed.restore_round_opened(round_opened);
+
+    std::vector<std::string> problems;
+    if (validate_state(parsed, problems).code != ResultCode::Success) {
+        error = problems.empty() ? "state violates business rules"
+                                 : problems.front();
+        return false;
+    }
+
     out = std::move(parsed);
     return true;
 }
@@ -960,8 +1190,10 @@ bool read_file(const std::string& path, std::string& content,
     return true;
 }
 
-bool write_file_atomic(const std::string& path, const std::string& content,
-                       std::string& error) {
+// 把内容写到 path：先写 .tmp；backup_existing 为真且旧主文件仍能通过校验时，
+// 才把旧主文件复制成 .bak（避免用损坏内容覆盖有效备份）；最后原子替换。
+bool write_tmp_and_replace(const std::string& path, const std::string& content,
+                           bool backup_existing, std::string& error) {
     const std::string tmp = path + ".tmp";
     {
         std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
@@ -980,21 +1212,38 @@ bool write_file_atomic(const std::string& path, const std::string& content,
         }
     }
 
-    // 备份上一版；备份失败就不继续，保证原文件还在。
-    // 先删旧备份再复制：MinGW 的 copy_file(overwrite_existing) 在目标已存在时
-    // 会报 "File exists"，这里用 remove + copy 保证跨平台一致。
-    std::error_code ec;
-    if (std::filesystem::exists(path, ec)) {
-        const std::string backup = path + ".bak";
-        std::error_code remove_ec;
-        std::filesystem::remove(backup, remove_ec);
-        std::error_code copy_ec;
-        std::filesystem::copy_file(path, backup, copy_ec);
-        if (copy_ec) {
-            error = "cannot create backup " + backup + ": " + copy_ec.message();
-            std::error_code ignored;
-            std::filesystem::remove(tmp, ignored);
-            return false;
+    if (backup_existing) {
+        std::error_code ec;
+        if (std::filesystem::exists(path, ec)) {
+            // 只有旧主文件仍然可解析且通过业务校验时才覆盖备份。
+            std::string existing;
+            std::string read_error;
+            bool old_is_valid = false;
+            if (read_file(path, existing, read_error)) {
+                JsonValue root;
+                JsonParser parser(existing);
+                std::string parse_error;
+                if (parser.parse(root, parse_error)) {
+                    SystemContext probe = make_seed_context();
+                    std::string build_error;
+                    old_is_valid = build_context_from_json(root, probe, build_error);
+                }
+            }
+            if (old_is_valid) {
+                const std::string backup = path + ".bak";
+                std::error_code remove_ec;
+                std::filesystem::remove(backup, remove_ec);
+                std::error_code copy_ec;
+                std::filesystem::copy_file(path, backup, copy_ec);
+                if (copy_ec) {
+                    error = "cannot create backup " + backup + ": " +
+                            copy_ec.message();
+                    std::error_code ignored;
+                    std::filesystem::remove(tmp, ignored);
+                    return false;
+                }
+            }
+            // 旧主文件已损坏：保留原有 .bak，不覆盖。
         }
     }
 
@@ -1006,6 +1255,7 @@ bool write_file_atomic(const std::string& path, const std::string& content,
         return false;
     }
 #else
+    std::error_code ec;
     std::filesystem::rename(tmp, path, ec);
     if (ec) {
         error = "cannot replace " + path + ": " + ec.message();
@@ -1081,7 +1331,6 @@ OperationResult load_state(const StorageOptions& options,
     }
 
     if (!build_context_from_json(root, out_context, error)) {
-        // schema 版本单独归类，其余都按数据一致性问题返回。
         const bool schema_error = error.find("schema_version") != std::string::npos;
         return {schema_error ? ResultCode::StorageSchemaMismatch
                              : ResultCode::StorageIntegrityError,
@@ -1090,14 +1339,24 @@ OperationResult load_state(const StorageOptions& options,
     return {ResultCode::Success, "loaded " + options.path};
 }
 
-OperationResult save_state(const SystemContext& context,
+OperationResult save_state(SystemContext& context,
                            const StorageOptions& options) {
+    // 保存前先观察"本轮是否已开放"，否则自动开放后保存会把 false 写回文件。
+    context.observe_registration_round();
+
+    std::vector<std::string> problems;
+    if (validate_state(context, problems).code != ResultCode::Success) {
+        return {ResultCode::StorageIntegrityError,
+                problems.empty() ? "state violates business rules"
+                                 : problems.front()};
+    }
+
     std::string error;
     if (!ensure_directory(options.path, options.create_dirs, error)) {
         return {ResultCode::StorageIoError, error};
     }
     const std::string content = build_state_json(context);
-    if (!write_file_atomic(options.path, content, error)) {
+    if (!write_tmp_and_replace(options.path, content, true, error)) {
         return {ResultCode::StorageIoError, error};
     }
     return {ResultCode::Success, "saved " + options.path};
@@ -1120,9 +1379,12 @@ OperationResult restore_state(const StorageOptions& options,
         return loaded;
     }
 
-    const OperationResult saved = save_state(restored, options);
-    if (saved.code != ResultCode::Success) {
-        return saved;
+    // 恢复时不再备份（backup_existing=false），避免用损坏的主文件覆盖 .bak。
+    restored.observe_registration_round();
+    std::string error;
+    const std::string content = build_state_json(restored);
+    if (!write_tmp_and_replace(options.path, content, false, error)) {
+        return {ResultCode::StorageIoError, error};
     }
     out_context = std::move(restored);
     return {ResultCode::Success, "restored from " + backup};

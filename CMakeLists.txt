@@ -88,3 +88,9 @@ if (MSVC)
 else()
     target_compile_options(persistence_service PRIVATE -Wall -Wextra)
 endif()
+
+# GCC 8 的 std::filesystem 需要显式链接 stdc++fs；GCC 9+ 下该库为空，可忽略。
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
+        AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9.0)
+    target_link_libraries(persistence_service PUBLIC stdc++fs)
+endif()

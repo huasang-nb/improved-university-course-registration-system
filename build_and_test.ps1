@@ -1,6 +1,7 @@
 # 编译并运行全部测试（Zhu Ziliang）
 # 用法：.\build_and_test.ps1
-# 需要支持 C++17 的 g++。全部测试通过时脚本返回 0，任一测试失败返回 1。
+# 需要支持 C++17 的 g++（GCC 8.1+；持久化目标会自动追加 -lstdc++fs）。
+# 全部测试通过时脚本返回 0，任一测试失败返回 1。
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -55,6 +56,8 @@ $targets = @(
                     "source_code/teacher_and_administration_services.cpp",
                     "source_code/persistence_service.cpp",
                     "automated_tests/persistence_tests.cpp")
+        # GCC 8 的 std::filesystem 需要显式链接 stdc++fs；GCC 9+/MSVC 下这个库为空，可忽略。
+        Extra = @("-lstdc++fs")
     }
 )
 
@@ -62,7 +65,9 @@ $failures = 0
 foreach ($target in $targets) {
     $exe = Join-Path $build ($target.Name + ".exe")
     Write-Host ("`n=== build " + $target.Name + " ===") -ForegroundColor Cyan
-    & $gxx @common @($target.Sources) -o $exe
+    $extra = @()
+    if ($target.ContainsKey("Extra")) { $extra = $target.Extra }
+    & $gxx @common @($target.Sources) -o $exe @extra
     if ($LASTEXITCODE -ne 0) {
         Write-Host ("BUILD FAILED: " + $target.Name) -ForegroundColor Red
         $failures++

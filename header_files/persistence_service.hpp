@@ -4,17 +4,19 @@
 // 持久化模块（Zhang Yikai）
 //
 // 把 SystemContext 整体存成一个 JSON 快照，进程退出后重启可以恢复：
-//   * save_state()        把当前状态写成 <path>.tmp，备份旧文件为 <path>.bak，
-//                         再原子替换 <path>；
-//   * load_state()        读文件 -> 解析 -> 校验 -> 才替换 out_context；
-//   * restore_state()     优先从 <path>.bak 恢复；没有备份时返回 StorageBackupMissing；
-//   * initialize_storage() 文件不存在时用内置 seed 初始化并立即落盘。
+//   * save_state()        先观察"本轮是否已开放"，再校验整份数据，序列化到
+//                         <path>.tmp，备份旧文件为 <path>.bak，最后原子替换；
+//   * load_state()        解析 -> 校验 -> 全部通过后才替换 out_context；
+//   * restore_state()     从 <path>.bak 恢复；恢复时**不覆盖 .bak**，失败可以重试；
+//   * initialize_storage() 文件不存在时用 seed 初始化，写盘成功后才发布；
+//   * validate_state()    按现有业务约束检查整份状态（选退课不重放 enroll）。
 //
-// 写入永远先落临时文件，失败时不动内存里的 SystemContext，也不删原文件。
+// 所有入口失败时都不修改调用方的 SystemContext。
 // 只依赖标准库（filesystem / fstream），不引入第三方 JSON 库。
 // ============================================================================
 
 #include <string>
+#include <vector>
 
 #include "teacher_and_administration_services.hpp"
 
@@ -27,22 +29,29 @@ struct StorageOptions {
     bool create_dirs = true;
 };
 
-// 启动入口：文件存在则载入，不存在则用 seed 初始化并落盘。
+// 启动入口：文件存在则载入，不存在则用 seed 初始化，写盘成功后才发布。
 OperationResult initialize_storage(const StorageOptions& options,
                                    SystemContext& out_context);
 
-// 载入：解析 + 校验 + 构造新的 SystemContext；成功才替换 out_context。
+// 载入：解析 + 校验 + 构造新的 SystemContext；全部通过才替换 out_context。
 OperationResult load_state(const StorageOptions& options,
                            SystemContext& out_context);
 
-// 保存：序列化到 tmp -> 备份旧文件为 .bak -> 原子替换目标文件。
-OperationResult save_state(const SystemContext& context,
-                           const StorageOptions& options);
+// 保存：先 observe_registration_round()，再校验整份状态，最后原子写盘。
+// 失败时不修改传入的 context，也不破坏已有文件与 .bak。
+OperationResult save_state(SystemContext& context, const StorageOptions& options);
 
-// 恢复：优先从 .bak 载入；没有 .bak 时返回 StorageBackupMissing。
-// 恢复成功后同时把结果写回主文件。
+// 恢复：从 .bak 载入；成功后用原子替换写回主文件，**不覆盖 .bak**，
+// 因此失败后可以再次恢复。没有 .bak 时返回 StorageBackupMissing。
 OperationResult restore_state(const StorageOptions& options,
                               SystemContext& out_context);
+
+// 按现有业务约束校验整份状态；problems 为空表示一致。
+// 检查项：课程至少一个教学班、教学班至少一段上课时间、账号角色内/跨角色唯一、
+//        有效选课不超容量、同一学生同一教学班不重复 active、学生时间冲突、
+//        学分不超上限、引用完整。同一教学班内部的时段重叠仍然允许。
+OperationResult validate_state(const SystemContext& context,
+                               std::vector<std::string>& problems);
 
 // 首次运行 / 测试用的种子数据（与 documentation/interfaces.md 4.1 一致）。
 SystemContext make_seed_context();
