@@ -1,9 +1,33 @@
 #pragma once
 
+#include <cctype>
 #include <string>
 #include <vector>
 
 namespace course_registration {
+
+// 账号比较的统一规则：去掉首尾空白，再转小写。
+// 维护入口、持久化保存/恢复校验与后续登录匹配都应使用它，避免
+// "带空格的账号" 在不同入口被当成不同账号。
+inline std::string normalize_account_key(const std::string& text) {
+    size_t begin = 0;
+    size_t end = text.size();
+    while (begin < end &&
+           std::isspace(static_cast<unsigned char>(text[begin]))) {
+        ++begin;
+    }
+    while (end > begin &&
+           std::isspace(static_cast<unsigned char>(text[end - 1]))) {
+        --end;
+    }
+    std::string result;
+    result.reserve(end - begin);
+    for (size_t i = begin; i < end; ++i) {
+        result.push_back(static_cast<char>(
+            std::tolower(static_cast<unsigned char>(text[i]))));
+    }
+    return result;
+}
 
 // 一次上课的时间。分钟从当天 00:00 起计算，例如 09:00 是 540。
 struct ClassMeeting {

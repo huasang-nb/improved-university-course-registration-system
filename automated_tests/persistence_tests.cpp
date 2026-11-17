@@ -623,6 +623,10 @@ int main() {
         Student unchanged = same_numeric.students()[0];
         CHECK(admin_service.update_student(admin_user, unchanged).code ==
               ResultCode::Success);
+
+        // 共享查找也使用 trim+lower：带首尾空白的查询能命中。
+        CHECK(same_numeric.find_student_by_number("  S2023001  ") != nullptr);
+        CHECK(same_numeric.find_teacher_by_number("  t9000001  ") != nullptr);
     }
 
     // ==================================================================

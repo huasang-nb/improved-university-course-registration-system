@@ -639,25 +639,6 @@ bool is_blank(const std::string& text) {
     return true;
 }
 
-std::string trim_copy(const std::string& text) {
-    size_t begin = 0;
-    size_t end = text.size();
-    while (begin < end &&
-           std::isspace(static_cast<unsigned char>(text[begin]))) {
-        ++begin;
-    }
-    while (end > begin &&
-           std::isspace(static_cast<unsigned char>(text[end - 1]))) {
-        --end;
-    }
-    return text.substr(begin, end - begin);
-}
-
-// 与 Zhu 的维护入口/登录匹配统一的账号比较：去掉首尾空白，再转小写。
-std::string normalized_account(const std::string& text) {
-    return lower_copy(trim_copy(text));
-}
-
 bool is_leap_year(int year) {
     return (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
 }
@@ -874,7 +855,7 @@ OperationResult validate_state(const SystemContext& context,
     std::map<std::string, std::string> accounts;
     auto insert_account = [&](const std::string& number,
                               const std::string& role) {
-        const std::string key = normalized_account(number);
+        const std::string key = normalize_account_key(number);
         const auto found = accounts.find(key);
         if (found != accounts.end()) {
             add("duplicate account " + number + " (" + found->second + " and " +

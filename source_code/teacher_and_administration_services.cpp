@@ -279,7 +279,8 @@ const Teacher* SystemContext::find_teacher(int teacher_id) const {
 const Student* SystemContext::find_student_by_number(
     const std::string& number) const {
     for (const Student& student : students_) {
-        if (to_lower(student.student_number) == to_lower(number)) {
+        if (normalize_account_key(student.student_number) ==
+            normalize_account_key(number)) {
             return &student;
         }
     }
@@ -289,7 +290,8 @@ const Student* SystemContext::find_student_by_number(
 const Teacher* SystemContext::find_teacher_by_number(
     const std::string& number) const {
     for (const Teacher& teacher : teachers_) {
-        if (to_lower(teacher.teacher_number) == to_lower(number)) {
+        if (normalize_account_key(teacher.teacher_number) ==
+            normalize_account_key(number)) {
             return &teacher;
         }
     }

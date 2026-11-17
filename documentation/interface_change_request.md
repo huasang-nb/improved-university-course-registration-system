@@ -195,3 +195,36 @@
 - [ ] 同意 `restore_enrollments` 只给持久化层使用（头文件注释已写明）。
 - [ ] 同意 `round_opened()` / `restore_round_opened(bool)` 的命名与语义。
 - [ ] 确认 `.\build_and_test.ps1` 在最新分支上仍是 `ALL BUILD AND TESTS PASSED`。
+
+
+## 八、账号比较规则的统一（Zhang Yikai → Zhu Ziliang / Zhang Yuhua 复核）
+
+**问题**：维护入口只做 `to_lower`，持久化做 `trim + to_lower`；带首尾空白的
+跨角色重名会在持久化被拒，但维护入口的 `find_*_by_number` 查不到，
+导致入口、保存、恢复、登录四处不一致。
+
+**改动**（追加式）：
+
+1. `header_files/course_registration_business_rules.hpp` 新增 inline 函数：
+
+   ```cpp
+   inline std::string normalize_account_key(const std::string& text);
+   ```
+
+   规则：去掉首尾空白，再转小写。
+
+2. `source_code/teacher_and_administration_services.cpp` 的
+   `SystemContext::find_student_by_number()` / `find_teacher_by_number()`
+   由 `to_lower(a) == to_lower(b)` 改为
+   `normalize_account_key(a) == normalize_account_key(b)`。
+
+3. `source_code/persistence_service.cpp` 的账号唯一性校验改用同一函数。
+
+**影响**：维护入口（create/update 的查重）、持久化保存/恢复校验、后续登录匹配
+使用同一规则；带空白的账号会被视为同一账号。存储值本身不做修改。
+
+**复核清单**：
+
+- [ ] 同意新增 `normalize_account_key`（inline，不改变已有函数签名）。
+- [ ] 同意 `find_*_by_number` 改为 trim+lower（行为变化：带首尾空白的查询现在能命中）。
+- [ ] 后续登录模块请复用该函数，不要另写一套。

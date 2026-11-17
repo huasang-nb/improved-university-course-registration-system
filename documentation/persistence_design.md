@@ -125,8 +125,9 @@ SystemContext make_seed_context();
 **三类人员**
 - 内部数字 ID > 0，且只在各自集合内唯一（不要求跨角色全局唯一）；
 - 学号 / 工号 / 管理员账号、姓名非空白；
-- 账号按"去掉首尾空白再转小写"比较，**角色内与跨角色**都不得重复；
-- 停用账号（`account_active=false`）仍占用其账号。
+- 账号按 `normalize_account_key`（去掉首尾空白再转小写）比较，**角色内与跨角色**
+  都不得重复；停用账号（`account_active=false`）仍占用其账号；
+  维护入口的 `find_*_by_number` 与后续登录匹配使用同一函数。
 
 **选课记录**
 - 引用的学生、教学班必须存在（**Active 与 Dropped 都检查**）；
