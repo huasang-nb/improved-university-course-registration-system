@@ -630,6 +630,101 @@ bool contains_key(const std::vector<std::string>& keys, const std::string& key) 
     return false;
 }
 
+bool is_blank(const std::string& text) {
+    for (const char c : text) {
+        if (!std::isspace(static_cast<unsigned char>(c))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::string trim_copy(const std::string& text) {
+    size_t begin = 0;
+    size_t end = text.size();
+    while (begin < end &&
+           std::isspace(static_cast<unsigned char>(text[begin]))) {
+        ++begin;
+    }
+    while (end > begin &&
+           std::isspace(static_cast<unsigned char>(text[end - 1]))) {
+        --end;
+    }
+    return text.substr(begin, end - begin);
+}
+
+// 与 Zhu 的维护入口/登录匹配统一的账号比较：去掉首尾空白，再转小写。
+std::string normalized_account(const std::string& text) {
+    return lower_copy(trim_copy(text));
+}
+
+bool is_leap_year(int year) {
+    return (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+}
+
+int days_in_month(int year, int month) {
+    static const int kDays[] = {31, 28, 31, 30, 31, 30,
+                                31, 31, 30, 31, 30, 31};
+    if (month == 2 && is_leap_year(year)) {
+        return 29;
+    }
+    return kDays[month - 1];
+}
+
+bool all_digits(const std::string& text, size_t from, size_t to) {
+    for (size_t i = from; i < to; ++i) {
+        if (!std::isdigit(static_cast<unsigned char>(text[i]))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// "YYYY-MM-DDTHH:MM"：固定宽度；按真实日历（含闰年）校验。
+bool is_valid_iso_minute(const std::string& text) {
+    if (text.size() != 16) {
+        return false;
+    }
+    if (text[4] != '-' || text[7] != '-' || text[10] != 'T' ||
+        text[13] != ':') {
+        return false;
+    }
+    if (!all_digits(text, 0, 4) || !all_digits(text, 5, 7) ||
+        !all_digits(text, 8, 10) || !all_digits(text, 11, 13) ||
+        !all_digits(text, 14, 16)) {
+        return false;
+    }
+    const int year = std::stoi(text.substr(0, 4));
+    const int month = std::stoi(text.substr(5, 2));
+    const int day = std::stoi(text.substr(8, 2));
+    const int hour = std::stoi(text.substr(11, 2));
+    const int minute = std::stoi(text.substr(14, 2));
+    if (month < 1 || month > 12 || hour < 0 || hour > 23 || minute < 0 ||
+        minute > 59) {
+        return false;
+    }
+    return day >= 1 && day <= days_in_month(year, month);
+}
+
+bool is_valid_meeting(const ClassMeeting& meeting) {
+    return meeting.day_of_week >= 1 && meeting.day_of_week <= 7 &&
+           meeting.start_minute >= 0 && meeting.end_minute <= 24 * 60 &&
+           meeting.start_minute < meeting.end_minute;
+}
+
+bool classes_overlap(const TeachingClass& left, const TeachingClass& right) {
+    for (const ClassMeeting& a : left.meetings) {
+        for (const ClassMeeting& b : right.meetings) {
+            if (a.day_of_week == b.day_of_week &&
+                a.start_minute < b.end_minute &&
+                b.start_minute < a.end_minute) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 }  // namespace
 
 // ---------------------------------------------------------------------------
@@ -666,23 +761,62 @@ OperationResult validate_state(const SystemContext& context,
                 " has no teaching class");
         }
     }
+    // 课程字段与唯一性：与 create_course / update_course 的规则一致。
+    for (const Course& course : courses) {
+        const std::string label =
+            "course " + std::to_string(course.course_id);
+        if (course.course_id <= 0) {
+            add("course_id must be positive");
+        }
+        if (is_blank(course.course_code)) {
+            add(label + " has blank course_code");
+        }
+        if (is_blank(course.course_name)) {
+            add(label + " has blank course_name");
+        }
+        if (course.credits <= 0) {
+            add(label + " has non-positive credits");
+        }
+    }
+    for (size_t i = 0; i < courses.size(); ++i) {
+        for (size_t j = i + 1; j < courses.size(); ++j) {
+            if (lower_copy(courses[i].course_code) ==
+                lower_copy(courses[j].course_code)) {
+                add("duplicate course_code " + courses[i].course_code);
+            }
+        }
+    }
     for (const TeachingClass& item : classes) {
         const std::string label =
             "teaching class " + std::to_string(item.teaching_class_id);
-        if (item.capacity < 0) {
-            add(label + " has negative capacity");
+        if (item.teaching_class_id <= 0) {
+            add("teaching_class_id must be positive");
+        }
+        if (item.capacity <= 0) {
+            add(label + " has non-positive capacity");
         }
         if (item.meetings.empty()) {
             add(label + " has no meeting");
         }
         for (const ClassMeeting& meeting : item.meetings) {
-            if (meeting.day_of_week < 1 || meeting.day_of_week > 7) {
-                add(label + " has an invalid day_of_week");
+            if (!is_valid_meeting(meeting)) {
+                add(label + " has an invalid meeting");
             }
-            if (meeting.start_minute < 0 ||
-                meeting.end_minute > 24 * 60 ||
-                meeting.start_minute >= meeting.end_minute) {
-                add(label + " has an invalid meeting time");
+        }
+    }
+    // 同一教师不能在同一时段带两个教学班（与 create_teaching_class 一致）。
+    for (size_t i = 0; i < classes.size(); ++i) {
+        for (size_t j = i + 1; j < classes.size(); ++j) {
+            if (classes[i].teaching_class_id ==
+                classes[j].teaching_class_id) {
+                continue;
+            }
+            if (classes[i].teacher_id == classes[j].teacher_id &&
+                classes_overlap(classes[i], classes[j])) {
+                add("teacher " + std::to_string(classes[i].teacher_id) +
+                    " has overlapping teaching classes " +
+                    std::to_string(classes[i].teaching_class_id) + " and " +
+                    std::to_string(classes[j].teaching_class_id));
             }
         }
     }
@@ -736,11 +870,11 @@ OperationResult validate_state(const SystemContext& context,
         }
     }
 
-    // ---- 2. 账号唯一性：角色内 + 跨角色（数字 ID 不要求跨角色唯一）----
+    // ---- 2. 账号：去掉首尾空白再转小写后，角色内 + 跨角色唯一 ----
     std::map<std::string, std::string> accounts;
     auto insert_account = [&](const std::string& number,
                               const std::string& role) {
-        const std::string key = lower_copy(number);
+        const std::string key = normalized_account(number);
         const auto found = accounts.find(key);
         if (found != accounts.end()) {
             add("duplicate account " + number + " (" + found->second + " and " +
@@ -750,13 +884,69 @@ OperationResult validate_state(const SystemContext& context,
         }
     };
     for (const Student& item : students) {
+        if (item.student_id <= 0) {
+            add("student_id must be positive");
+        }
+        if (is_blank(item.student_number)) {
+            add("student " + std::to_string(item.student_id) +
+                " has blank student_number");
+        }
+        if (is_blank(item.name)) {
+            add("student " + std::to_string(item.student_id) +
+                " has blank name");
+        }
         insert_account(item.student_number, "student");
     }
     for (const Teacher& item : teachers) {
+        if (item.teacher_id <= 0) {
+            add("teacher_id must be positive");
+        }
+        if (is_blank(item.teacher_number)) {
+            add("teacher " + std::to_string(item.teacher_id) +
+                " has blank teacher_number");
+        }
+        if (is_blank(item.name)) {
+            add("teacher " + std::to_string(item.teacher_id) +
+                " has blank name");
+        }
         insert_account(item.teacher_number, "teacher");
     }
     for (const Administrator& item : administrators) {
+        if (item.administrator_id <= 0) {
+            add("administrator_id must be positive");
+        }
+        if (is_blank(item.account_number)) {
+            add("administrator " + std::to_string(item.administrator_id) +
+                " has blank account_number");
+        }
+        if (is_blank(item.name)) {
+            add("administrator " + std::to_string(item.administrator_id) +
+                " has blank name");
+        }
         insert_account(item.account_number, "administrator");
+    }
+
+    // ---- 2b. 选课规则：学分上限与日期（与 set_registration_period /
+    //          set_maximum_credits 的规则一致；两个日期都为空表示手动开关）----
+    if (rule.maximum_credits <= 0) {
+        add("maximum_credits must be positive");
+    }
+    const bool opens_empty = rule.opens_at.empty();
+    const bool closes_empty = rule.closes_at.empty();
+    if (opens_empty != closes_empty) {
+        add("opens_at and closes_at must both be set or both be empty");
+    } else if (!opens_empty) {
+        const bool opens_valid = is_valid_iso_minute(rule.opens_at);
+        const bool closes_valid = is_valid_iso_minute(rule.closes_at);
+        if (!opens_valid) {
+            add("opens_at is not a valid YYYY-MM-DDTHH:MM");
+        }
+        if (!closes_valid) {
+            add("closes_at is not a valid YYYY-MM-DDTHH:MM");
+        }
+        if (opens_valid && closes_valid && !(rule.opens_at < rule.closes_at)) {
+            add("registration period must start before it ends");
+        }
     }
 
     // ---- 3. 引用完整性 ----
@@ -870,6 +1060,13 @@ OperationResult validate_state(const SystemContext& context,
                 // 同一教学班重复出现由第 5 条负责，这里跳过。
                 if (active_classes[i] == active_classes[j]) {
                     continue;
+                }
+                // 同一学生不能同时读同一门 Course 的两个教学班。
+                if (active_classes[i]->course_id ==
+                    active_classes[j]->course_id) {
+                    add("student " + std::to_string(student.student_id) +
+                        " is enrolled in two teaching classes of course " +
+                        std::to_string(active_classes[i]->course_id));
                 }
                 bool conflict = false;
                 for (const ClassMeeting& a : active_classes[i]->meetings) {

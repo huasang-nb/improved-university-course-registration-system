@@ -67,6 +67,115 @@ StorageOptions options_at(const std::string& path) {
     return options;
 }
 
+// 逐字段比较两份状态（不只比数量），用于验证失败后原状态未被改动。
+void expect_same_state(const SystemContext& left, const SystemContext& right,
+                       int line) {
+    const std::vector<Course> courses_left = left.courses();
+    const std::vector<Course> courses_right = right.courses();
+    check(courses_left.size() == courses_right.size(), "course count", line);
+    if (courses_left.size() == courses_right.size()) {
+        for (size_t i = 0; i < courses_left.size(); ++i) {
+            const Course& a = courses_left[i];
+            const Course& b = courses_right[i];
+            check(a.course_id == b.course_id, "course id", line);
+            check(a.course_code == b.course_code, "course code", line);
+            check(a.course_name == b.course_name, "course name", line);
+            check(a.credits == b.credits, "course credits", line);
+        }
+    }
+    const std::vector<TeachingClass> classes_left = left.teaching_classes();
+    const std::vector<TeachingClass> classes_right = right.teaching_classes();
+    check(classes_left.size() == classes_right.size(), "class count", line);
+    if (classes_left.size() == classes_right.size()) {
+        for (size_t i = 0; i < classes_left.size(); ++i) {
+            const TeachingClass& a = classes_left[i];
+            const TeachingClass& b = classes_right[i];
+            check(a.teaching_class_id == b.teaching_class_id, "class id", line);
+            check(a.course_id == b.course_id, "class course", line);
+            check(a.teacher_id == b.teacher_id, "class teacher", line);
+            check(a.capacity == b.capacity, "class capacity", line);
+            check(a.meetings.size() == b.meetings.size(), "class meetings",
+                  line);
+            if (a.meetings.size() == b.meetings.size()) {
+                for (size_t m = 0; m < a.meetings.size(); ++m) {
+                    check(a.meetings[m].day_of_week ==
+                              b.meetings[m].day_of_week,
+                          "meeting day", line);
+                    check(a.meetings[m].start_minute ==
+                              b.meetings[m].start_minute,
+                          "meeting start", line);
+                    check(a.meetings[m].end_minute ==
+                              b.meetings[m].end_minute,
+                          "meeting end", line);
+                    check(a.meetings[m].room == b.meetings[m].room,
+                          "meeting room", line);
+                }
+            }
+        }
+    }
+    check(left.students().size() == right.students().size(), "student count",
+          line);
+    if (left.students().size() == right.students().size()) {
+        for (size_t i = 0; i < left.students().size(); ++i) {
+            const Student& a = left.students()[i];
+            const Student& b = right.students()[i];
+            check(a.student_id == b.student_id, "student id", line);
+            check(a.student_number == b.student_number, "student number", line);
+            check(a.name == b.name, "student name", line);
+            check(a.major == b.major, "student major", line);
+            check(a.account_active == b.account_active, "student active", line);
+        }
+    }
+    check(left.teachers().size() == right.teachers().size(), "teacher count",
+          line);
+    if (left.teachers().size() == right.teachers().size()) {
+        for (size_t i = 0; i < left.teachers().size(); ++i) {
+            const Teacher& a = left.teachers()[i];
+            const Teacher& b = right.teachers()[i];
+            check(a.teacher_id == b.teacher_id, "teacher id", line);
+            check(a.teacher_number == b.teacher_number, "teacher number", line);
+            check(a.name == b.name, "teacher name", line);
+            check(a.department == b.department, "teacher department", line);
+            check(a.account_active == b.account_active, "teacher active", line);
+        }
+    }
+    check(left.administrators().size() == right.administrators().size(),
+          "admin count", line);
+    if (left.administrators().size() == right.administrators().size()) {
+        for (size_t i = 0; i < left.administrators().size(); ++i) {
+            const Administrator& a = left.administrators()[i];
+            const Administrator& b = right.administrators()[i];
+            check(a.administrator_id == b.administrator_id, "admin id", line);
+            check(a.account_number == b.account_number, "admin number", line);
+            check(a.name == b.name, "admin name", line);
+            check(a.account_active == b.account_active, "admin active", line);
+        }
+    }
+    const std::vector<Enrollment> enrollments_left = left.all_enrollments();
+    const std::vector<Enrollment> enrollments_right = right.all_enrollments();
+    check(enrollments_left.size() == enrollments_right.size(),
+          "enrollment count", line);
+    if (enrollments_left.size() == enrollments_right.size()) {
+        for (size_t i = 0; i < enrollments_left.size(); ++i) {
+            const Enrollment& a = enrollments_left[i];
+            const Enrollment& b = enrollments_right[i];
+            check(a.student_id == b.student_id, "enrollment student", line);
+            check(a.teaching_class_id == b.teaching_class_id,
+                  "enrollment class", line);
+            check(a.status == b.status, "enrollment status", line);
+        }
+    }
+    const RegistrationRule ra = left.rule();
+    const RegistrationRule rb = right.rule();
+    check(ra.registration_open == rb.registration_open, "rule open", line);
+    check(ra.maximum_credits == rb.maximum_credits, "rule credits", line);
+    check(ra.opens_at == rb.opens_at, "rule opens_at", line);
+    check(ra.closes_at == rb.closes_at, "rule closes_at", line);
+    check(left.round_opened() == right.round_opened(), "round opened", line);
+}
+
+#define EXPECT_SAME_STATE(a, b) expect_same_state((a), (b), __LINE__)
+
 }  // namespace
 
 int main() {
@@ -449,6 +558,306 @@ int main() {
         CHECK(initialize_storage(options_at(dir + "/blocked/init.json"), keep)
                   .code == ResultCode::StorageIoError);
         CHECK(keep.all_enrollments().size() == before);
+    }
+
+    // ==================================================================
+    // 12. 同一课程的不同教学班：无时间冲突、学分也不超，仍必须拒绝。
+    // ==================================================================
+    {
+        std::vector<std::string> problems;
+        SystemContext same_course = make_seed_context();
+        same_course.registration().restore_enrollments(
+            {{1001, 10, EnrollmentStatus::Active},
+             {1001, 11, EnrollmentStatus::Active}});  // 课程 1 的班 10/11
+        CHECK(validate_state(same_course, problems).code !=
+              ResultCode::Success);
+        CHECK(!problems.empty());
+
+        // 正常对照：不同课程、时间不冲突 → 允许
+        SystemContext normal = make_seed_context();
+        normal.registration().restore_enrollments(
+            {{1001, 10, EnrollmentStatus::Active},
+             {1001, 30, EnrollmentStatus::Active}});
+        CHECK(validate_state(normal, problems).code == ResultCode::Success);
+    }
+
+    // ==================================================================
+    // 13. 账号比较：trim + 小写；跨角色、管理员、停用账号都要查。
+    // ==================================================================
+    {
+        std::vector<std::string> problems;
+
+        SystemContext spaced = make_seed_context();
+        Teacher teacher = spaced.teachers()[0];
+        teacher.teacher_number = "  s2023001  ";
+        spaced.apply_teacher_change(teacher);
+        CHECK(validate_state(spaced, problems).code != ResultCode::Success);
+
+        SystemContext admin_dup = make_seed_context();
+        Administrator admin = admin_dup.administrators()[0];
+        admin.account_number = "S2023001";
+        admin_dup.apply_administrator_change(admin);
+        CHECK(validate_state(admin_dup, problems).code != ResultCode::Success);
+
+        SystemContext disabled = make_seed_context();
+        Student student = disabled.students()[0];
+        student.account_active = false;
+        disabled.apply_student_change(student);
+        Teacher other = disabled.teachers()[0];
+        other.teacher_number = "s2023001";
+        disabled.apply_teacher_change(other);
+        CHECK(validate_state(disabled, problems).code != ResultCode::Success);
+
+        // 不同角色相同数字 ID → 允许（只按各自集合唯一）
+        SystemContext same_numeric = make_seed_context();
+        Teacher extra = same_numeric.teachers()[0];
+        extra.teacher_id = 1001;  // 与 student_id 1001 相同
+        extra.teacher_number = "T9000001";
+        same_numeric.apply_teacher_change(extra);
+        CHECK(validate_state(same_numeric, problems).code ==
+              ResultCode::Success);
+
+        // 修改时排除自身：管理员更新同一条学生记录应成功
+        AdministratorService admin_service(same_numeric);
+        UserIdentity admin_user{900, "A2020001", Role::Administrator};
+        Student unchanged = same_numeric.students()[0];
+        CHECK(admin_service.update_student(admin_user, unchanged).code ==
+              ResultCode::Success);
+    }
+
+    // ==================================================================
+    // 14. 基础字段、取值与日期。
+    // ==================================================================
+    {
+        std::vector<std::string> problems;
+
+        SystemContext cap = make_seed_context();
+        TeachingClass item = cap.teaching_classes()[0];
+        item.capacity = 0;
+        cap.apply_teaching_class_change(item);
+        CHECK(validate_state(cap, problems).code != ResultCode::Success);
+
+        SystemContext negative = make_seed_context();
+        Course course = negative.courses()[0];
+        course.credits = -1;
+        negative.apply_course_change(course);
+        CHECK(validate_state(negative, problems).code != ResultCode::Success);
+
+        SystemContext blank_account = make_seed_context();
+        Student student = blank_account.students()[0];
+        student.student_number = "   ";
+        blank_account.apply_student_change(student);
+        CHECK(validate_state(blank_account, problems).code !=
+              ResultCode::Success);
+
+        SystemContext blank_course = make_seed_context();
+        Course course2 = blank_course.courses()[0];
+        course2.course_code = " ";
+        blank_course.apply_course_change(course2);
+        CHECK(validate_state(blank_course, problems).code !=
+              ResultCode::Success);
+
+        SystemContext zero_credits = make_seed_context();
+        RegistrationRule rule = zero_credits.rule();
+        rule.maximum_credits = 0;
+        zero_credits.apply_rule_change(rule);
+        CHECK(validate_state(zero_credits, problems).code !=
+              ResultCode::Success);
+
+        SystemContext bad_date = make_seed_context();
+        RegistrationRule rule2 = bad_date.rule();
+        rule2.opens_at = "2026-02-30T09:00";
+        rule2.closes_at = "2026-03-01T09:00";
+        bad_date.apply_rule_change(rule2);
+        CHECK(validate_state(bad_date, problems).code != ResultCode::Success);
+
+        SystemContext leap = make_seed_context();
+        RegistrationRule rule3 = leap.rule();
+        rule3.opens_at = "2024-02-29T09:00";  // 闰日合法
+        rule3.closes_at = "2024-03-01T09:00";
+        leap.apply_rule_change(rule3);
+        CHECK(validate_state(leap, problems).code == ResultCode::Success);
+
+        SystemContext order = make_seed_context();
+        RegistrationRule rule4 = order.rule();
+        rule4.opens_at = "2026-03-02T09:00";
+        rule4.closes_at = "2026-03-01T09:00";
+        order.apply_rule_change(rule4);
+        CHECK(validate_state(order, problems).code != ResultCode::Success);
+
+        SystemContext half = make_seed_context();
+        RegistrationRule rule5 = half.rule();
+        rule5.opens_at = "2026-03-01T09:00";
+        rule5.closes_at.clear();
+        half.apply_rule_change(rule5);
+        CHECK(validate_state(half, problems).code != ResultCode::Success);
+
+        // 两个日期都为空 → 手动开关，允许
+        SystemContext manual = make_seed_context();
+        CHECK(validate_state(manual, problems).code == ResultCode::Success);
+
+        // 专业/部门为空 → 允许（不新增必填）
+        SystemContext optional = make_seed_context();
+        Student student2 = optional.students()[0];
+        student2.major.clear();
+        optional.apply_student_change(student2);
+        Teacher teacher2 = optional.teachers()[0];
+        teacher2.department.clear();
+        optional.apply_teacher_change(teacher2);
+        CHECK(validate_state(optional, problems).code == ResultCode::Success);
+    }
+
+    // ==================================================================
+    // 15. 关联规则：课程代码重复、教师排课冲突、Active/Dropped 引用。
+    // ==================================================================
+    {
+        std::vector<std::string> problems;
+
+        SystemContext duplicate_code = make_seed_context();
+        Course course = duplicate_code.courses()[1];
+        course.course_code = "se101";
+        duplicate_code.apply_course_change(course);
+        CHECK(validate_state(duplicate_code, problems).code !=
+              ResultCode::Success);
+
+        SystemContext teacher_conflict = make_seed_context();
+        TeachingClass moved = teacher_conflict.teaching_classes()[1];
+        moved.teacher_id = 100;                  // 与 class 10 同一教师
+        moved.meetings = {{1, 560, 620, "A102"}};  // 周一与 class 10 重叠
+        teacher_conflict.apply_teaching_class_change(moved);
+        CHECK(validate_state(teacher_conflict, problems).code !=
+              ResultCode::Success);
+
+        SystemContext bad_dropped = make_seed_context();
+        bad_dropped.registration().restore_enrollments(
+            {{1001, 999, EnrollmentStatus::Dropped}});
+        CHECK(validate_state(bad_dropped, problems).code !=
+              ResultCode::Success);
+
+        SystemContext bad_active = make_seed_context();
+        bad_active.registration().restore_enrollments(
+            {{9999, 10, EnrollmentStatus::Active}});
+        CHECK(validate_state(bad_active, problems).code !=
+              ResultCode::Success);
+    }
+
+    // ==================================================================
+    // 16. 允许行为对照：Dropped 历史、同班内部重叠、停用账号历史关联。
+    // ==================================================================
+    {
+        std::vector<std::string> problems;
+
+        SystemContext history = make_seed_context();
+        history.registration().restore_enrollments(
+            {{1001, 10, EnrollmentStatus::Dropped},
+             {1001, 11, EnrollmentStatus::Active}});
+        CHECK(validate_state(history, problems).code == ResultCode::Success);
+
+        SystemContext internal = make_seed_context();
+        TeachingClass meeting = internal.teaching_classes()[2];
+        meeting.meetings.push_back({1, 580, 640, "B202"});
+        internal.apply_teaching_class_change(meeting);
+        CHECK(validate_state(internal, problems).code == ResultCode::Success);
+
+        SystemContext inactive = make_seed_context();
+        Student student = inactive.students()[0];
+        student.account_active = false;
+        inactive.apply_student_change(student);
+        Teacher teacher = inactive.teachers()[0];
+        teacher.account_active = false;
+        inactive.apply_teacher_change(teacher);
+        inactive.registration().restore_enrollments(
+            {{1001, 10, EnrollmentStatus::Active}});
+        CHECK(validate_state(inactive, problems).code == ResultCode::Success);
+    }
+
+    // ==================================================================
+    // 17. 保存/加载失败：返回失败、原状态与原文件不变。
+    // ==================================================================
+    {
+        std::vector<std::string> problems;
+        SystemContext bad = make_seed_context();
+        TeachingClass item = bad.teaching_classes()[0];
+        item.capacity = 0;
+        bad.apply_teaching_class_change(item);
+        CHECK(validate_state(bad, problems).code != ResultCode::Success);
+
+        const std::string reject_path = dir + "/reject_save.json";
+        CHECK(save_state(bad, options_at(reject_path)).code ==
+              ResultCode::StorageIntegrityError);
+        CHECK(!fs::exists(reject_path));
+
+        // 已存在的合法文件不会被失败的保存改写
+        const std::string stable_path = dir + "/stable.json";
+        SystemContext good = make_seed_context();
+        CHECK(save_state(good, options_at(stable_path)).code ==
+              ResultCode::Success);
+        const std::string before = read_text(stable_path);
+        CHECK(save_state(bad, options_at(stable_path)).code ==
+              ResultCode::StorageIntegrityError);
+        CHECK(read_text(stable_path) == before);
+
+        // 加载失败不替换原状态
+        SystemContext keep = make_seed_context();
+        CHECK(keep.registration().enroll(1001, 10).code == ResultCode::Success);
+        SystemContext snapshot = keep;
+        std::string broken = read_text(stable_path);
+        CHECK(replace_once(broken, "\"capacity\": 2", "\"capacity\": 0"));
+        write_text(dir + "/bad_capacity.json", broken);
+        CHECK(load_state(options_at(dir + "/bad_capacity.json"), keep).code ==
+              ResultCode::StorageIntegrityError);
+        EXPECT_SAME_STATE(keep, snapshot);
+    }
+
+    // ==================================================================
+    // 18. 加载路径拒绝非法 JSON（空白账号 / 跨角色重名 / 负学分 / 非法日期）。
+    // ==================================================================
+    {
+        const std::string base_text = read_text(dir + "/valid.json");
+        auto expect_load_rejected = [&](const std::string& name,
+                                        const std::string& from,
+                                        const std::string& to) {
+            std::string text = base_text;
+            CHECK(replace_once(text, from, to));
+            const std::string path = dir + "/" + name + ".json";
+            write_text(path, text);
+            SystemContext keep = make_seed_context();
+            CHECK(keep.registration().enroll(1001, 10).code ==
+                  ResultCode::Success);
+            SystemContext snapshot = keep;
+            CHECK(load_state(options_at(path), keep).code ==
+                  ResultCode::StorageIntegrityError);
+            EXPECT_SAME_STATE(keep, snapshot);
+        };
+
+        expect_load_rejected("bad_account", "\"student_number\": \"S2023001\"",
+                             "\"student_number\": \"   \"");
+        expect_load_rejected("cross_role",
+                             "\"teacher_number\": \"T2015007\"",
+                             "\"teacher_number\": \"S2023001\"");
+        expect_load_rejected("bad_credits", "\"credits\": 3",
+                             "\"credits\": -1");
+        expect_load_rejected("bad_date", "\"opens_at\": \"\"",
+                             "\"opens_at\": \"2026-02-30T09:00\"");
+    }
+
+    // ==================================================================
+    // 19. 正常对照：合法状态保存后加载，逐字段一致。
+    // ==================================================================
+    {
+        SystemContext normal = make_seed_context();
+        CHECK(normal.registration().enroll(1001, 10).code ==
+              ResultCode::Success);
+        CHECK(normal.registration().enroll(1002, 20).code ==
+              ResultCode::Success);
+        Student student = normal.students()[0];
+        student.account_active = false;
+        normal.apply_student_change(student);
+        const std::string path = dir + "/normal.json";
+        CHECK(save_state(normal, options_at(path)).code == ResultCode::Success);
+        SystemContext loaded = make_seed_context();
+        CHECK(load_state(options_at(path), loaded).code == ResultCode::Success);
+        EXPECT_SAME_STATE(normal, loaded);
     }
 
     if (g_failures != 0) {

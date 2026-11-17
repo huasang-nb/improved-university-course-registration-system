@@ -109,19 +109,41 @@ SystemContext make_seed_context();
 
 ## 七、加载校验规则（`validate_state`）
 
-加载不能重放 `enroll()`，但必须验证整份数据符合现有约束：
+加载不能重放 `enroll()`，但必须按现有业务入口的规则验证整份数据：
 
-- 每个 `Course` 至少有一个 `TeachingClass`；
-- 每个 `TeachingClass` 至少有一段 `meetings`，且 day∈[1,7]、start<end；
-- 账号唯一：学生学号、教师工号、管理员账号在**角色内与跨角色**都不得重复
-  （大小写不敏感）；内部数字 ID 只要求角色内唯一；
-- 每个教学班的有效选课数 ≤ 容量；
+**课程**
+- `course_id > 0`；`course_code`、`course_name` 非空白；`credits > 0`；
+- `course_code` 不区分大小写唯一；
+- 每个 `Course` 至少有一个 `TeachingClass`。
+
+**教学班**
+- `teaching_class_id > 0`；`capacity > 0`；至少一段 `meetings`；
+- 每段 meeting：day∈[1,7]、0 ≤ start < end ≤ 1440；
+- `course_id`、`teacher_id` 必须存在；
+- 同一教师的不同教学班不得在同一时段重叠（与 `create_teaching_class` 一致）。
+
+**三类人员**
+- 内部数字 ID > 0，且只在各自集合内唯一（不要求跨角色全局唯一）；
+- 学号 / 工号 / 管理员账号、姓名非空白；
+- 账号按"去掉首尾空白再转小写"比较，**角色内与跨角色**都不得重复；
+- 停用账号（`account_active=false`）仍占用其账号。
+
+**选课记录**
+- 引用的学生、教学班必须存在（**Active 与 Dropped 都检查**）；
 - 同一学生同一教学班不得有多个 `active`；
+- 同一学生不得同时选同一门 `Course` 的两个教学班（Dropped 不算当前选课）；
+- 每个教学班有效选课数 ≤ 容量；
 - 同一学生的不同教学班之间不得同一天时段重叠（**同一教学班内部的重叠仍允许**）；
-- 每个学生的有效选课学分合计 ≤ `maximum_credits`；
-- 选课记录引用的学生、教学班必须存在；教学班引用的课程、教师必须存在。
+- 每个学生的有效选课学分合计 ≤ `maximum_credits`。
 
-全部通过后才替换运行状态。
+**选课规则**
+- `maximum_credits > 0`；
+- `opens_at` / `closes_at` 要么都为空（手动开关），要么都是合法的
+  `YYYY-MM-DDTHH:MM`（按真实日历，含闰年）且 `opens_at < closes_at`；
+  只设置一个视为非法。
+
+全部通过后才替换运行状态；`save_state` 与 `load_state` 使用同一套校验。
+
 
 ## 八、调用方流程（选退课接入）
 
@@ -131,13 +153,15 @@ SystemContext make_seed_context();
 4. 成功后才 `context = std::move(staging)`；
 5. 失败丢弃 staging，`context` 不变。
 
-## 九、编译支持
+## 九、编译支持（实测）
 
-- **GCC 8.1+**：`std::filesystem` 需要链接 `stdc++fs`；
-  `build_and_test.ps1` 已对持久化目标自动追加 `-lstdc++fs`，
-  CMake 在 GCC < 9 时自动链接 `stdc++fs`。
-- **MSVC 2017+**：直接编译，无需额外链接。
-- 本机用 GCC 13.2 验证；MinGW 8.1 的链接问题按上述方式处理。
+- **实际验证**：GCC 13.2.0（Windows），命令
+  `powershell -ExecutionPolicy Bypass -File .\build_and_test.ps1`，
+  输出 `ALL BUILD AND TESTS PASSED`；`-DNDEBUG` 下 `persistence_tests` 同样通过。
+- **MSVC**：按 Zhu / Yuhua 的复测可以通过（本机未实测）。
+- **MinGW 8.1.0**：仍在 `<filesystem>` 头文件处编译失败，追加 `-lstdc++fs`
+  不能解决；因此本模块要求 **GCC 9+ / MSVC 2017+**，**不支持 MinGW 8.1**。
+- **CMake**：目标已加（GCC < 9 自动链接 `stdc++fs`），但本机没有 cmake，**未实测**。
 
 ## 十、测试
 

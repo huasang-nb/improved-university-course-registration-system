@@ -15,7 +15,8 @@
   .\build\persistence_tests.exe
   ```
 
-- 编译器：GCC 8.1+（脚本已对持久化目标追加 `-lstdc++fs`）、MSVC 2017+。
+- 编译器：**GCC 9+ / MSVC 2017+**（本机实测 GCC 13.2.0；MinGW 8.1 在 `<filesystem>`
+  头文件处编译失败，不支持）；CMake 目标已加但**未实测**。
 - CMake 目标：`persistence_service` / `persistence_tests`（GCC < 9 自动链接 `stdc++fs`）。
 
 ## 2. 接口与最小示例
