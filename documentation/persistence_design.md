@@ -88,11 +88,15 @@ SystemContext make_seed_context();
 `save_state` 取非 const 引用，是为了在导出前先调用
 `SystemContext::observe_registration_round()`，把"本轮已开放"的事实落盘。
 
+**副作用**：该调用会更新**传入对象**的 `round_opened`。因此调用方必须传
+临时状态（`staging`），业务操作与保存都成功后，才把 `staging` 发布为正式共享状态；
+失败时丢弃 `staging`，正式状态不受影响。
+
 ## 六、保存与恢复的原子性 / 备份安全
 
 **保存**（`save_state`）：
 
-1. `observe_registration_round()` → 更新 `round_opened`；
+1. `observe_registration_round()` → 更新**传入对象**的 `round_opened`（副作用）；
 2. `validate_state()` → 不通过则返回 `StorageIntegrityError`，不写文件；
 3. 序列化 → 写 `state.json.tmp`；
 4. 旧主文件**仍能解析并通过校验**时，才复制为 `.bak`（否则保留旧 `.bak`）；
@@ -148,11 +152,11 @@ SystemContext make_seed_context();
 
 ## 八、调用方流程（选退课接入）
 
-1. `SystemContext staging = context;`
-2. 在 staging 上调用 `enroll()` / `drop()`；
-3. `save_state(staging, options)`（该调用会先 observe + 校验）；
-4. 成功后才 `context = std::move(staging)`；
-5. 失败丢弃 staging，`context` 不变。
+1. `SystemContext staging = context;`（临时副本）
+2. `OperationResult changed = enroll()/drop()`；失败 → 丢弃 staging，返回 changed；
+3. `OperationResult saved = save_state(staging, options)`（先 observe + 校验）；
+   失败 → 丢弃 staging，返回 saved，`context` 不变；
+4. 两步都成功 → `context = std::move(staging)`。
 
 ## 九、编译支持（实测）
 
@@ -173,6 +177,8 @@ SystemContext make_seed_context();
 - 主文件损坏时恢复成功、`.bak` 不被覆盖、可重复恢复；
 - 主文件被占用时恢复失败且 `.bak` 保留，释放后可再次恢复；
 - 七条业务约束各自被拒绝，且无效状态不会被 `save_state` 写入；
+- 学分累加溢出（`2147483647 + 5`）被拒绝、单门课已超上限被拒绝、
+  总学分恰好等于上限通过、超过上限被拒绝（保存与加载共用校验）；
 - 载入拒绝违反约束的 JSON；
 - 整数超出 `int` 范围被拒绝（不静默截断）；
 - `\uD83D\uDE00` 正确解析为 4 字节 UTF-8，再次保存仍有效；
@@ -182,5 +188,8 @@ SystemContext make_seed_context();
 ## 十一、待确认
 
 - [ ] 是否同意 `save_state` 改为非 const（为了保存前 observe）？
-- [ ] 七条校验规则是否符合团队约定（尤其"同一教学班内部重叠允许"）？
+- [ ] 是否同意账号统一为 trim+lower（已改 `find_*_by_number`，见
+      `interface_change_request.md` 第八节）？
+- [ ] 累计学分已改用 `long long`；核心 `enroll()` 与管理员的
+      `update_course()` 仍是 `int` 累加，存在同样的溢出，需按分工另行处理。
 - [ ] 默认路径 `data/state.json` 是否合适？

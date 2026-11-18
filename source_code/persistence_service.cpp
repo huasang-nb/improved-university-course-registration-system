@@ -971,14 +971,15 @@ OperationResult validate_state(const SystemContext& context,
 
     // ---- 4. 有效选课不超容量 ----
     for (const TeachingClass& item : classes) {
-        int active = 0;
+        // 用更宽的整数计数，避免大量记录时 int 累加溢出。
+        long long active = 0;
         for (const Enrollment& enrollment : enrollments) {
             if (enrollment.teaching_class_id == item.teaching_class_id &&
                 enrollment.status == EnrollmentStatus::Active) {
                 ++active;
             }
         }
-        if (active > item.capacity) {
+        if (active > static_cast<long long>(item.capacity)) {
             add("teaching class " + std::to_string(item.teaching_class_id) +
                 " has " + std::to_string(active) +
                 " active enrollments but capacity " +
@@ -1069,14 +1070,15 @@ OperationResult validate_state(const SystemContext& context,
             }
         }
 
-        int credits = 0;
+        // 累计学分用 long long，避免 "2147483647 + 5" 这类 int 溢出绕过上限。
+        long long credits = 0;
         for (const TeachingClass* item : active_classes) {
             const Course* course = find_course(item->course_id);
             if (course != nullptr) {
-                credits += course->credits;
+                credits += static_cast<long long>(course->credits);
             }
         }
-        if (credits > rule.maximum_credits) {
+        if (credits > static_cast<long long>(rule.maximum_credits)) {
             add("student " + std::to_string(student.student_id) + " has " +
                 std::to_string(credits) +
                 " credits, above the limit " +

@@ -864,6 +864,85 @@ int main() {
         EXPECT_SAME_STATE(normal, loaded);
     }
 
+    // ==================================================================
+    // 20. 累计学分溢出与边界（int 相加会溢出，必须拒绝）。
+    // ==================================================================
+    {
+        std::vector<std::string> problems;
+
+        // 20.1 2147483647 + 5：int 相加会溢出，long long 累加后必须超限
+        SystemContext overflow = make_seed_context();
+        Course huge = overflow.courses()[0];
+        huge.credits = 2147483647;
+        overflow.apply_course_change(huge);
+        overflow.registration().restore_enrollments(
+            {{1001, 10, EnrollmentStatus::Active},
+             {1001, 30, EnrollmentStatus::Active}});
+        CHECK(validate_state(overflow, problems).code != ResultCode::Success);
+        const std::string overflow_path = dir + "/overflow.json";
+        CHECK(save_state(overflow, options_at(overflow_path)).code ==
+              ResultCode::StorageIntegrityError);
+        CHECK(!fs::exists(overflow_path));
+
+        // 20.2 单门课已经超过上限
+        SystemContext single = make_seed_context();
+        Course huge2 = single.courses()[0];
+        huge2.credits = 2147483647;
+        single.apply_course_change(huge2);
+        single.registration().restore_enrollments(
+            {{1001, 10, EnrollmentStatus::Active}});
+        CHECK(validate_state(single, problems).code != ResultCode::Success);
+
+        // 20.3 恰好等于上限（3 + 5 = 8）→ 允许
+        SystemContext exact = make_seed_context();
+        RegistrationRule rule = exact.rule();
+        rule.maximum_credits = 8;
+        exact.apply_rule_change(rule);
+        exact.registration().restore_enrollments(
+            {{1001, 10, EnrollmentStatus::Active},
+             {1001, 30, EnrollmentStatus::Active}});
+        CHECK(validate_state(exact, problems).code == ResultCode::Success);
+        const std::string exact_path = dir + "/exact.json";
+        CHECK(save_state(exact, options_at(exact_path)).code ==
+              ResultCode::Success);
+        SystemContext exact_loaded = make_seed_context();
+        CHECK(load_state(options_at(exact_path), exact_loaded).code ==
+              ResultCode::Success);
+        EXPECT_SAME_STATE(exact, exact_loaded);
+
+        // 20.4 超过上限（3 + 5 = 8 > 7）→ 拒绝
+        SystemContext over = make_seed_context();
+        RegistrationRule rule2 = over.rule();
+        rule2.maximum_credits = 7;
+        over.apply_rule_change(rule2);
+        over.registration().restore_enrollments(
+            {{1001, 10, EnrollmentStatus::Active},
+             {1001, 30, EnrollmentStatus::Active}});
+        CHECK(validate_state(over, problems).code != ResultCode::Success);
+
+        // 20.5 加载路径共用同一校验：巨大值 + 两门课 → 拒绝且原状态不变
+        std::string text = read_text(dir + "/valid.json");
+        CHECK(replace_once(text, "\"credits\": 3",
+                           "\"credits\": 2147483647"));
+        CHECK(replace_once(
+            text,
+            "{\"student_id\": 1001, \"teaching_class_id\": 10, \"status\": "
+            "\"active\"}",
+            "{\"student_id\": 1001, \"teaching_class_id\": 10, \"status\": "
+            "\"active\"}, "
+            "{\"student_id\": 1001, \"teaching_class_id\": 30, \"status\": "
+            "\"active\"}"));
+        const std::string overflow_load = dir + "/overflow_load.json";
+        write_text(overflow_load, text);
+        SystemContext keep = make_seed_context();
+        CHECK(keep.registration().enroll(1001, 10).code ==
+              ResultCode::Success);
+        SystemContext snapshot = keep;
+        CHECK(load_state(options_at(overflow_load), keep).code ==
+              ResultCode::StorageIntegrityError);
+        EXPECT_SAME_STATE(keep, snapshot);
+    }
+
     if (g_failures != 0) {
         std::cerr << "FAILED: " << g_failures << " check(s)\n";
         return 1;

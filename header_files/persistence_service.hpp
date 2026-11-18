@@ -38,7 +38,10 @@ OperationResult load_state(const StorageOptions& options,
                            SystemContext& out_context);
 
 // 保存：先 observe_registration_round()，再校验整份状态，最后原子写盘。
-// 失败时不修改传入的 context，也不破坏已有文件与 .bak。
+// 副作用：会更新**传入对象**的 round_opened（观察"本轮是否已开放"）。
+// 调用方必须传临时状态（staging）：业务操作和保存都成功后才把 staging 发布为
+// 正式共享状态；失败则丢弃 staging，正式状态保持不变。
+// 失败时不改写文件，也不破坏已有文件与 .bak。
 OperationResult save_state(SystemContext& context, const StorageOptions& options);
 
 // 恢复：从 .bak 载入；成功后用原子替换写回主文件，**不覆盖 .bak**，
@@ -46,10 +49,13 @@ OperationResult save_state(SystemContext& context, const StorageOptions& options
 OperationResult restore_state(const StorageOptions& options,
                               SystemContext& out_context);
 
-// 按现有业务约束校验整份状态；problems 为空表示一致。
-// 检查项：课程至少一个教学班、教学班至少一段上课时间、账号角色内/跨角色唯一、
-//        有效选课不超容量、同一学生同一教学班不重复 active、学生时间冲突、
-//        学分不超上限、引用完整。同一教学班内部的时段重叠仍然允许。
+// 按现有业务入口的规则校验整份状态；problems 为空表示一致。
+// 检查项：课程字段/学分/代码唯一、教学班容量/时间/教师排课冲突、
+//        账号按 normalize_account_key 在角色内与跨角色唯一（含停用账号）、
+//        有效选课不超容量、同一学生同一教学班不重复 active、同课程多班、
+//        学生时间冲突、学分上限（用 long long 累加避免溢出）、
+//        选课规则日期、Active 与 Dropped 引用完整。
+//        同一教学班内部的时段重叠、不同角色相同数字 ID 仍然允许。
 OperationResult validate_state(const SystemContext& context,
                                std::vector<std::string>& problems);
 

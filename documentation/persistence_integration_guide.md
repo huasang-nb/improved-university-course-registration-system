@@ -40,17 +40,25 @@ StorageOptions options;                       // data/state.json
 SystemContext context = make_seed_context();  // 换成现有 context
 initialize_storage(options, context);
 
-SystemContext staging = context;              // 1. 临时状态
-// 2. 在 staging 上做 business（enroll / drop）
-OperationResult saved = save_state(staging, options);   // 3. 保存（observe + 校验）
-if (saved.code == ResultCode::Success) {
-    context = std::move(staging);             // 4. 成功才提交
+SystemContext staging = context;              // 1. 临时状态（副本）
+OperationResult changed = /* 在 staging 上 enroll / drop */;
+if (changed.code != ResultCode::Success) {
+    return changed;                           // 2. 业务失败：丢弃 staging
 }
 
-SystemContext loaded = make_seed_context();   // 5. 加载回来
+OperationResult saved = save_state(staging, options);   // 3. observe + 校验 + 写盘
+if (saved.code != ResultCode::Success) {
+    return saved;                             // 4. 保存失败：丢弃 staging，context 不变
+}
+context = std::move(staging);                 // 5. 两步都成功才发布
+
+SystemContext loaded = make_seed_context();   // 6. 加载回来
 load_state(options, loaded);
 restore_state(options, loaded);               // 或从 .bak 恢复
 ```
+
+> `save_state` 会更新**传入的 staging** 的 `round_opened`；正式共享的 `context`
+> 在发布前不会被改动。失败时 `context` 原样，只有 staging 被丢弃。
 
 ## 3. 调用职责与状态变化
 
@@ -62,10 +70,10 @@ restore_state(options, loaded);               // 或从 .bak 恢复
 | 成功后 `context = std::move(staging)` | 调用方 |
 | 返回选退课成功 | 调用方 |
 
-- `save_state` 会修改**传入的** context 的 `round_opened`（observe 的副作用），
-  不会改其他状态；失败时其余状态原样，且不写文件。
+- `save_state` 会修改**传入的 staging** 的 `round_opened`（observe 的副作用），
+  不会改其他状态；失败时不写文件。正式共享的 `context` 在发布前不受影响。
 - `load_state` / `restore_state` / `initialize_storage` 失败时都不替换 `out_context`。
-- 因此保存失败时：共享 `SystemContext` 原样不变，直接返回失败原因即可。
+- 因此保存失败时：丢弃 staging 即可，共享 `SystemContext` 原样不变。
 
 ## 4. 保存位置与启动
 
@@ -83,6 +91,7 @@ restore_state(options, loaded);               // 或从 .bak 恢复
 | JSON 损坏 | `StorageParseError` | 写入 `{ not json` |
 | schema 不认识 | `StorageSchemaMismatch` | 写入 `{"schema_version": 99}` |
 | 业务约束不通过 | `StorageIntegrityError` | 超容量、重复账号、时间冲突、学分超限、课程无教学班等 |
+| 学分累加溢出 | `StorageIntegrityError` | 一门课 `credits = 2147483647`，再选一门 5 学分课（总学分用 long long 累加） |
 | 无备份 | `StorageBackupMissing` | 只保存一次后直接 `restore_state` |
 
 约束不通过时 `save_state` 不会写盘；`load_state` 不会替换 `out_context`。
