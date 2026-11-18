@@ -80,7 +80,7 @@ target_include_directories(persistence_service
 add_executable(persistence_tests
     automated_tests/persistence_tests.cpp)
 target_link_libraries(persistence_tests
-    PRIVATE persistence_service)
+    PRIVATE persistence_service student_query_and_timetable_services)
 add_test(NAME persistence COMMAND persistence_tests)
 
 if (MSVC)

@@ -54,6 +54,7 @@ $targets = @(
         Name = "persistence_tests"
         Sources = @("source_code/course_registration_business_rules.cpp",
                     "source_code/teacher_and_administration_services.cpp",
+                    "source_code/student_query_and_timetable_services.cpp",
                     "source_code/persistence_service.cpp",
                     "automated_tests/persistence_tests.cpp")
         # GCC 8 的 std::filesystem 需要显式链接 stdc++fs；GCC 9+/MSVC 下这个库为空，可忽略。
