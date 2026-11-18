@@ -1345,6 +1345,41 @@ void test_data_integrity_reports_duplicate_accounts() {
     CHECK(reported);
 }
 
+// 一致性检查：Dropped 记录指向不存在的教学班必须报错；
+// 正常的 Dropped 记录（教学班还在）不算问题。
+void test_data_integrity_reports_dangling_dropped_enrollment() {
+    Fixture fixture;
+    AdministratorService administration(fixture.context);
+
+    // 正常退课：记录保留，教学班还在，检查应当是干净的。
+    CHECK_CODE(fixture.context.registration().enroll(1001, 10),
+               ResultCode::Success);
+    CHECK_CODE(fixture.context.registration().drop(1001, 10),
+               ResultCode::Success);
+    std::vector<std::string> problems;
+    CHECK_CODE(administration.check_data_integrity(fixture.admin, problems),
+               ResultCode::Success);
+    CHECK(problems.empty());
+
+    // 模拟恢复的数据里缺少教学班 10：只剩一条 Dropped 记录指向它。
+    fixture.context.remove_teaching_class_record(10);
+    const OperationResult result =
+        administration.check_data_integrity(fixture.admin, problems);
+    CHECK_CODE(result, ResultCode::InvalidInput);
+
+    bool reported = false;
+    for (const std::string& problem : problems) {
+        if (problem.find("dropped enrollment of student 1001 refers to missing "
+                         "teaching_class_id 10") != std::string::npos) {
+            reported = true;
+        }
+    }
+    CHECK(reported);
+
+    // 检查本身不改数据：记录还在，仍然可以被读取。
+    CHECK(fixture.context.all_enrollments().size() == 1);
+}
+
 // ---------------------------------------------------------------------------
 // 一致性检查
 // ---------------------------------------------------------------------------
@@ -1478,6 +1513,7 @@ int main() {
     test_overlapping_meetings_in_one_class_are_allowed();
     test_account_number_is_unique_across_roles();
     test_data_integrity_reports_duplicate_accounts();
+    test_data_integrity_reports_dangling_dropped_enrollment();
     test_data_integrity_check();
     test_weekly_joint_scenario();
 

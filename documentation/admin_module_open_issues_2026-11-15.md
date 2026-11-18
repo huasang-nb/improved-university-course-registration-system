@@ -16,7 +16,7 @@
 | 数据存放 | 全部在内存：`SystemContext` 持有人员，`RegistrationService` 持有课程、教学班、选课记录、规则 |
 | 管理员账号维护 | **没有**入口（`AdministratorService` 只有学生、教师），跨角色查重目前三缺一 |
 | 课程删除 | `remove_course()` 要求 0 个教学班；`remove_teaching_class()` 又禁止删最后一个班 → 正常数据下课程删不掉 |
-| 测试 | `.\build_and_test.ps1` 全过；教师/管理员 **383 checks / 0 failures**；选课规则与学生查询两套全绿 |
+| 测试 | `.\build_and_test.ps1` 全过；教师/管理员 **434 checks / 0 failures**；选课规则与学生查询两套全绿 |
 
 ## 1. 修改后怎样调用保存接口，哪些操作需要一起保存
 
@@ -73,7 +73,7 @@ OperationResult create_course_with_teaching_class(
 
 ## 3. 课程删除的死锁与建议
 
-**状态：已按确认方案实现（2026-11-17）。**
+**状态：已按确认方案实现（2026-11-17），2026-11-18 复核通过。**
 
 规则：删课程走级联，删班仍禁止动最后一个班 —— 两者管的不是同一件事。
 
@@ -93,7 +93,7 @@ OperationResult create_course_with_teaching_class(
 
 备选：新增"停用课程"标志代替物理删除。这属于新增需求，本版不建议引入。
 
-## 4. 跨角色账号查重：已实现（2026-11-17）
+## 4. 跨角色账号查重：已实现（2026-11-17），复核通过
 
 **更新：本节原为"待实施"，现已落地。** 跨角色查重见提交 `667b57e`，
 删除级联与停用教师口径见提交 `7af6605`，入口 `SystemContext::find_account_owner()`。
@@ -146,7 +146,7 @@ OperationResult create_course_with_teaching_class(
 | 分支 | `feature/zhu-ziliang-admin-consistency` |
 | 最新提交 | `f6cd49a`（已推送；领先 main 1 个提交，**未合入 main**；main 当前 `b9b52df`） |
 | 提交内容 | 课程至少保留一个教学班、停用教师不可改派、有选退课记录的学生禁止删除 |
-| 测试 | `.\build_and_test.ps1` 全过：三套测试；教师/管理员 383 项断言、0 失败 |
+| 测试 | `.\build_and_test.ps1` 全过：三套测试；教师/管理员 434 项断言、0 失败 |
 
 **需要 Yuhua 确认**
 
@@ -163,5 +163,8 @@ OperationResult create_course_with_teaching_class(
 4. 新分支 `feature/zhang-yuhua-registration-acceptance` 的 574 项联调检查若调用了
    `create_course()`，需要一起改。
 
-**我的排期**：原子创建接口（等三人确认）→ 删课程级联（等确认）→ 跨角色查重（等登录规则）。
-三件都确认后按顺序提交，每件单独一个提交，便于分别复核。
+**进度（2026-11-18）**
+
+- 已完成并复核：跨角色账号查重、课程删除级联、停用教师口径收敛、Dropped 悬空记录检查。
+- 仍需推进：①「课程 + 首个教学班」原子创建（等三人确认接口签名，并真正收口旧 `create_course()`）；
+  ②管理员修改接入持久化（等 Kai 的 `save_state` / `load_state` 稳定，按 copy-on-write 执行）。

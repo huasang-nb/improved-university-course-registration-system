@@ -1534,6 +1534,17 @@ OperationResult AdministratorService::check_data_integrity(
                     " in teaching class " +
                     std::to_string(enrollments[left].teaching_class_id));
             }
+            // 教学班被删掉（或恢复的数据里不含它）时，退课记录会变成悬空历史，
+            // 同样要报出来；正常的 Dropped 记录（班还在）不报错。
+            TeachingClass dropped_class{};
+            if (!context_.find_teaching_class(enrollments[left].teaching_class_id,
+                                              dropped_class)) {
+                problems.push_back(
+                    "dropped enrollment of student " +
+                    std::to_string(enrollments[left].student_id) +
+                    " refers to missing teaching_class_id " +
+                    std::to_string(enrollments[left].teaching_class_id));
+            }
             continue;
         }
         TeachingClass enrolled_class{};

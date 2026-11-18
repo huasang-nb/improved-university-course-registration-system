@@ -24,7 +24,7 @@ OK: C:\Users\MSI_NB\Desktop\deepseek_harness_工作文件夹\improved-university
 All registration tests passed
 
 === run teacher_and_administration_services_tests ===
-PASS: 383 checks, 0 failure(s)
+PASS: 434 checks, 0 failure(s)
 
 === run student_query_and_timetable_tests ===
 All student query and timetable tests passed
