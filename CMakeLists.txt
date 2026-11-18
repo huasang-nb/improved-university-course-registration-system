@@ -2,6 +2,9 @@ cmake_minimum_required(VERSION 3.16)
 project(course_registration_starter LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+if(MSVC)
+    add_compile_options(/utf-8)
+endif()
 
 add_library(course_registration_business_rules source_code/course_registration_business_rules.cpp)
 target_include_directories(course_registration_business_rules PUBLIC header_files)
@@ -94,3 +97,38 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
         AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9.0)
     target_link_libraries(persistence_service PUBLIC stdc++fs)
 endif()
+
+# Zhang Yuhua：选退课溢出回归与持久化应用入口。
+add_executable(registration_credit_limit_tests
+    automated_tests/registration_credit_limit_tests.cpp)
+target_link_libraries(registration_credit_limit_tests
+    PRIVATE course_registration_business_rules)
+add_test(NAME registration_credit_limit COMMAND registration_credit_limit_tests)
+
+add_executable(registration_cross_module_acceptance
+    automated_tests/registration_cross_module_acceptance.cpp)
+target_link_libraries(registration_cross_module_acceptance
+    PRIVATE student_query_and_timetable_services)
+add_test(NAME registration_cross_module_acceptance
+    COMMAND registration_cross_module_acceptance)
+
+add_library(persistent_registration_service
+    source_code/persistent_registration_service.cpp)
+target_link_libraries(persistent_registration_service PUBLIC persistence_service)
+if(MSVC)
+    target_compile_options(persistent_registration_service PRIVATE /W4)
+else()
+    target_compile_options(persistent_registration_service PRIVATE -Wall -Wextra)
+endif()
+
+add_executable(registration_storage_integration_tests
+    automated_tests/registration_storage_integration_tests.cpp)
+target_link_libraries(registration_storage_integration_tests
+    PRIVATE persistent_registration_service student_query_and_timetable_services)
+add_test(NAME registration_storage_integration
+    COMMAND registration_storage_integration_tests)
+
+add_executable(registration_storage_demonstration
+    source_code/registration_storage_demonstration.cpp)
+target_link_libraries(registration_storage_demonstration
+    PRIVATE persistent_registration_service)
