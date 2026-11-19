@@ -1523,24 +1523,18 @@ void test_course_and_first_class_are_created_together() {
     CHECK(fixture.context.find_course(5, missing_course) == false);
 }
 
-// 已确认规则（2026-11-19）：教师停用不删除历史选退课记录、不自动退课、不清空任课关系；
-// 一致性检查与教师端读取都不应仅因"教师停用、数据完整"而报错。
-// 学生端"新一轮可选列表过滤"属于待实现项，不在本测试范围内。
+// 已确认规则：教师停用不删除历史选退课记录、不自动退课、不清空任课关系；
+// 一致性检查、管理员查看与正常改派都不应因"教师停用、数据完整"而报错。
+// 顺序刻意是"先建立 Active 与 Dropped 记录，再停用教师"，这样只验证停用前已有的数据，
+// 不依赖"停用后还能新选该班"这种行为（该行为仍待讨论）。
+// 学生端"新一轮可选列表过滤"属待团队确认的需求，不在本测试范围内。
 void test_inactive_teacher_keeps_history_intact() {
     Fixture fixture;
     AdministratorService administration(fixture.context);
     TeacherService teacher_service(fixture.context);
 
-    // 教师 100 停用：班级与任课关系保留
-    CHECK_CODE(administration.update_teacher(
-                   fixture.admin,
-                   {100, "T2015007", "Dr. Wang", "Software Engineering", false}),
-               ResultCode::Success);
-    TeachingClass stored{};
-    CHECK(fixture.context.find_teaching_class(10, stored));
-    CHECK(stored.teacher_id == 100);
-
-    // 历史：教师 100 的班里一条 Dropped，另一个班一条 Active
+    // 1. 教师仍在启用状态时建立历史：
+    //    教师 100 的班里一条 Dropped，另一个班一条 Active。
     CHECK_CODE(fixture.context.registration().enroll(1001, 10),
                ResultCode::Success);
     CHECK_CODE(fixture.context.registration().enroll(1002, 11),
@@ -1548,13 +1542,16 @@ void test_inactive_teacher_keeps_history_intact() {
     CHECK_CODE(fixture.context.registration().drop(1001, 10),
                ResultCode::Success);
 
-    // 仅"教师停用、数据完整"不算异常
-    std::vector<std::string> problems;
-    CHECK_CODE(administration.check_data_integrity(fixture.admin, problems),
+    // 2. 之后再停用教师 100
+    CHECK_CODE(administration.update_teacher(
+                   fixture.admin,
+                   {100, "T2015007", "Dr. Wang", "Software Engineering", false}),
                ResultCode::Success);
-    CHECK(problems.empty());
 
-    // 记录仍在：一条 Dropped、一条 Active
+    // 3. 班级、任课关系与记录都还在
+    TeachingClass stored{};
+    CHECK(fixture.context.find_teaching_class(10, stored));
+    CHECK(stored.teacher_id == 100);
     int active = 0;
     int dropped = 0;
     for (const Enrollment& enrollment : fixture.context.all_enrollments()) {
@@ -1567,7 +1564,13 @@ void test_inactive_teacher_keeps_history_intact() {
     CHECK(active == 1);
     CHECK(dropped == 1);
 
-    // 管理员仍能查看该班（含停用教师信息）
+    // 4. 仅"教师停用、数据完整"不算异常
+    std::vector<std::string> problems;
+    CHECK_CODE(administration.check_data_integrity(fixture.admin, problems),
+               ResultCode::Success);
+    CHECK(problems.empty());
+
+    // 5. 管理员仍能查看该班（含停用教师信息）
     TeachingClassSummary summary{};
     CHECK_CODE(teacher_service.class_summary(fixture.admin, 10, summary),
                ResultCode::Success);
@@ -1575,7 +1578,7 @@ void test_inactive_teacher_keeps_history_intact() {
     CHECK(summary.active_enrollments == 0);
     CHECK(summary.remaining_seats == 2);
 
-    // 通过正常改派流程换给启用教师：仍然允许，改派后数据一致
+    // 6. 通过正常改派流程换给启用教师：仍然允许，改派后数据一致
     CHECK_CODE(administration.update_teaching_class(
                    fixture.admin, make_class(10, 1, 300, 2, 1, 540, 600, "A101")),
                ResultCode::Success);
