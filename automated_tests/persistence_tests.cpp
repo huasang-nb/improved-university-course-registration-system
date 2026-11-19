@@ -68,6 +68,22 @@ StorageOptions options_at(const std::string& path) {
     return options;
 }
 
+// 删掉所有 ", \"password_hash\": \"...\"" 片段，用来构造 v1 旧快照。
+// PHC 字符串里没有需要转义的双引号，找到下一个引号即可截断。
+std::string strip_password_hash(std::string text) {
+    const std::string key = ", \"password_hash\": \"";
+    size_t pos = 0;
+    while ((pos = text.find(key, pos)) != std::string::npos) {
+        const size_t value_start = pos + key.size();
+        const size_t close = text.find('"', value_start);
+        if (close == std::string::npos) {
+            break;
+        }
+        text.erase(pos, close + 1 - pos);
+    }
+    return text;
+}
+
 // 逐字段比较两份状态（不只比数量），用于验证失败后原状态未被改动。
 void expect_same_state(const SystemContext& left, const SystemContext& right,
                        int line) {
@@ -1002,54 +1018,44 @@ int main() {
     }
 
     // ==================================================================
-    // 25. password_hash：v2 往返、空值、v1 旧快照兼容、类型错误。
+    // 25. password_hash：三角色往返、空哈希保留、类型错误拒绝。
     // ==================================================================
     {
         SystemContext state = make_seed_context();
+        const std::string student_hash =
+            "$argon2id$v=19$m=65536,t=3,p=4$c3R1ZGVudA$YWJjMTIz";
+        const std::string teacher_hash =
+            "$argon2id$v=19$m=65536,t=3,p=4$dGVhY2hlcg$ZGVmNDU2";
+        const std::string admin_hash =
+            "$argon2id$v=19$m=65536,t=3,p=4$YWRtaW4$Z2hpNzg5";
+
         Student alice = state.students()[0];
-        alice.password_hash =
-            "$argon2id$v=19$m=65536,t=3,p=4$c2FsdA$aGFzaA";
+        alice.password_hash = student_hash;
         state.apply_student_change(alice);
         Teacher wang = state.teachers()[0];
-        wang.password_hash =
-            "$argon2id$v=19$m=65536,t=3,p=4$dGVhY2hlcg$aGFzaA";
+        wang.password_hash = teacher_hash;
         state.apply_teacher_change(wang);
+        Administrator admin = state.administrators()[0];
+        admin.password_hash = admin_hash;
+        state.apply_administrator_change(admin);
+        // 学生 1002 保持空哈希，作为“尚未设置密码”的对照
 
         const std::string path = dir + "/password.json";
         CHECK(save_state(state, options_at(path)).code == ResultCode::Success);
         const std::string text = read_text(path);
         CHECK(text.find("\"schema_version\": 2") != std::string::npos);
-        CHECK(text.find("\"password_hash\": \"$argon2id$") !=
-              std::string::npos);
+        CHECK(text.find(student_hash) != std::string::npos);
+        CHECK(text.find(teacher_hash) != std::string::npos);
+        CHECK(text.find(admin_hash) != std::string::npos);
 
         SystemContext loaded = make_seed_context();
         CHECK(load_state(options_at(path), loaded).code == ResultCode::Success);
-        CHECK(loaded.students()[0].password_hash == alice.password_hash);
-        CHECK(loaded.teachers()[0].password_hash == wang.password_hash);
-        CHECK(loaded.administrators()[0].password_hash.empty());
+        CHECK(loaded.students()[0].password_hash == student_hash);
+        CHECK(loaded.teachers()[0].password_hash == teacher_hash);
+        CHECK(loaded.administrators()[0].password_hash == admin_hash);
+        CHECK(loaded.students()[1].password_hash.empty());
 
-        // v1 旧快照：去掉 password_hash 字段、版本改回 1，仍应加载
-        std::string v1 = read_text(path);
-        CHECK(replace_once(v1, "\"schema_version\": 2",
-                           "\"schema_version\": 1"));
-        CHECK(replace_once(
-            v1,
-            ", \"password_hash\": \"$argon2id$v=19$m=65536,t=3,p=4$c2FsdA$aGFzaA\"",
-            ""));
-        CHECK(replace_once(
-            v1,
-            ", \"password_hash\": \"$argon2id$v=19$m=65536,t=3,p=4$dGVhY2hlcg$aGFzaA\"",
-            ""));
-        CHECK(replace_once(v1, ", \"password_hash\": \"\"", ""));
-        const std::string v1_path = dir + "/password_v1.json";
-        write_text(v1_path, v1);
-        SystemContext v1_loaded = make_seed_context();
-        CHECK(load_state(options_at(v1_path), v1_loaded).code ==
-              ResultCode::Success);
-        CHECK(v1_loaded.students()[0].password_hash.empty());
-        CHECK(v1_loaded.teachers()[0].password_hash.empty());
-
-        // 类型错误：password_hash 必须是字符串
+        // 类型错误：加载失败且当前内存状态不变
         std::string bad = read_text(path);
         CHECK(replace_once(bad, "\"password_hash\": \"\"",
                            "\"password_hash\": 123"));
@@ -1060,6 +1066,68 @@ int main() {
         CHECK(load_state(options_at(bad_path), keep).code ==
               ResultCode::StorageIntegrityError);
         EXPECT_SAME_STATE(keep, snapshot);
+    }
+
+    // ==================================================================
+    // 26. v1 升级：全部人员无 password_hash，加载→再保存→v1 .bak 恢复。
+    // ==================================================================
+    {
+        // 先造一份带选课记录和任课关系的 v2 文件
+        SystemContext source = make_seed_context();
+        source.registration().restore_enrollments(
+            {{1001, 10, EnrollmentStatus::Active},
+             {1002, 30, EnrollmentStatus::Dropped}});
+        const std::string v2_path = dir + "/upgrade_source.json";
+        CHECK(save_state(source, options_at(v2_path)).code ==
+              ResultCode::Success);
+
+        // 转成 v1：版本改 1，删掉所有 password_hash 字段
+        std::string v1_text = read_text(v2_path);
+        CHECK(replace_once(v1_text, "\"schema_version\": 2",
+                           "\"schema_version\": 1"));
+        v1_text = strip_password_hash(v1_text);
+        CHECK(v1_text.find("\"password_hash\"") == std::string::npos);
+        const std::string v1_path = dir + "/upgrade_v1.json";
+        write_text(v1_path, v1_text);
+
+        // 加载 v1：三类账号哈希都为空，选课与任课关系保留
+        SystemContext upgraded = make_seed_context();
+        CHECK(load_state(options_at(v1_path), upgraded).code ==
+              ResultCode::Success);
+        CHECK(upgraded.students()[0].password_hash.empty());
+        CHECK(upgraded.teachers()[0].password_hash.empty());
+        CHECK(upgraded.administrators()[0].password_hash.empty());
+        CHECK(upgraded.all_enrollments().size() == 2);
+        TeachingClass class10{};
+        CHECK(upgraded.find_teaching_class(10, class10));
+        CHECK(class10.teacher_id == 100);
+        TeachingClass class30{};
+        CHECK(upgraded.find_teaching_class(30, class30));
+        CHECK(class30.teacher_id == 300);
+
+        // 再保存：自动升级为 v2，password_hash 字段齐备
+        const std::string upgraded_path = dir + "/upgrade_v2.json";
+        CHECK(save_state(upgraded, options_at(upgraded_path)).code ==
+              ResultCode::Success);
+        const std::string upgraded_text = read_text(upgraded_path);
+        CHECK(upgraded_text.find("\"schema_version\": 2") !=
+              std::string::npos);
+        CHECK(upgraded_text.find("\"password_hash\"") != std::string::npos);
+
+        // 从 v1 的 .bak 恢复：主文件写成 v2，.bak 原样保留
+        const std::string restore_path = dir + "/upgrade_restore.json";
+        const std::string backup_path = restore_path + ".bak";
+        write_text(backup_path, v1_text);
+        SystemContext restored = make_seed_context();
+        CHECK(restore_state(options_at(restore_path), restored).code ==
+              ResultCode::Success);
+        CHECK(restored.students()[0].password_hash.empty());
+        CHECK(restored.teachers()[0].password_hash.empty());
+        CHECK(restored.administrators()[0].password_hash.empty());
+        CHECK(restored.all_enrollments().size() == 2);
+        CHECK(read_text(restore_path).find("\"schema_version\": 2") !=
+              std::string::npos);
+        CHECK(read_text(backup_path) == v1_text);  // 恢复不覆盖 .bak
     }
 
     if (g_failures != 0) {
