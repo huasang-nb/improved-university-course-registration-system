@@ -676,11 +676,18 @@ OperationResult TeacherService::class_roster(
 AdministratorService::AdministratorService(SystemContext& context)
     : context_(context) {}
 
-OperationResult AdministratorService::create_course(const UserIdentity& user,
-                                                    const Course& course) {
+// URS 6.7 要求每门课程至少有一个教学班，因此课程与首个教学班必须一起校验、
+// 一起写入：任一项不通过，两者都不落库，不会留下"零教学班课程"。
+// 旧的单独 create_course() 已从这里移除，正常业务无法再创建无班课程；
+// 恢复/导入历史数据请直接构造 SystemContext（见 persistence_service）。
+OperationResult AdministratorService::create_course_with_teaching_class(
+    const UserIdentity& user, const Course& course,
+    const TeachingClass& first_teaching_class) {
     if (!PermissionRules::can_manage_catalog(user)) {
         return denied("creating a course");
     }
+
+    // ---- 课程字段 ----
     if (course.course_id <= 0) {
         return {ResultCode::InvalidInput, "course_id must be positive"};
     }
@@ -693,7 +700,6 @@ OperationResult AdministratorService::create_course(const UserIdentity& user,
     if (course.credits <= 0) {
         return {ResultCode::InvalidInput, "credits must be positive"};
     }
-
     for (const Course& existing : context_.courses()) {
         if (existing.course_id == course.course_id) {
             return {ResultCode::DuplicateIdentifier,
@@ -706,9 +712,69 @@ OperationResult AdministratorService::create_course(const UserIdentity& user,
         }
     }
 
+    // ---- 首个教学班字段 ----
+    if (first_teaching_class.course_id != course.course_id) {
+        return {ResultCode::InvalidInput,
+                "teaching class " +
+                    std::to_string(first_teaching_class.teaching_class_id) +
+                    " points at course_id " +
+                    std::to_string(first_teaching_class.course_id) +
+                    ", not " + std::to_string(course.course_id)};
+    }
+    if (first_teaching_class.teaching_class_id <= 0) {
+        return {ResultCode::InvalidInput, "teaching_class_id must be positive"};
+    }
+    for (const TeachingClass& existing : context_.teaching_classes()) {
+        if (existing.teaching_class_id ==
+            first_teaching_class.teaching_class_id) {
+            return {ResultCode::DuplicateIdentifier,
+                    "teaching_class_id " +
+                        std::to_string(first_teaching_class.teaching_class_id) +
+                        " already exists"};
+        }
+    }
+    if (first_teaching_class.capacity <= 0) {
+        return {ResultCode::InvalidInput, "capacity must be at least 1"};
+    }
+    if (first_teaching_class.meetings.empty()) {
+        return {ResultCode::InvalidInput,
+                "a teaching class needs at least one class meeting"};
+    }
+    for (const ClassMeeting& meeting : first_teaching_class.meetings) {
+        if (!is_valid_meeting(meeting)) {
+            return {ResultCode::InvalidInput,
+                    "invalid class meeting: " + describe(meeting)};
+        }
+    }
+    const Teacher* teacher =
+        context_.find_teacher(first_teaching_class.teacher_id);
+    if (teacher == nullptr) {
+        return {ResultCode::RecordNotFound,
+                "teacher_id " + std::to_string(first_teaching_class.teacher_id) +
+                    " not found"};
+    }
+    if (!teacher->account_active) {
+        return {ResultCode::InvalidInput,
+                "teacher " + teacher->teacher_number +
+                    " is not an active account"};
+    }
+    for (const TeachingClass& other : context_.teaching_classes()) {
+        if (other.teacher_id == first_teaching_class.teacher_id &&
+            teaching_classes_overlap(other, first_teaching_class)) {
+            return {ResultCode::TimeConflict,
+                    "teacher " + teacher->teacher_number +
+                        " already teaches teaching class " +
+                        std::to_string(other.teaching_class_id) +
+                        " in the same time slot"};
+        }
+    }
+
+    // ---- 全部通过后才写入 ----
     context_.apply_course_change(course);
+    context_.apply_teaching_class_change(first_teaching_class);
     return {ResultCode::Success,
-            "course " + course.course_code + " created"};
+            "course " + course.course_code + " created with teaching class " +
+                std::to_string(first_teaching_class.teaching_class_id)};
 }
 
 OperationResult AdministratorService::update_course(const UserIdentity& user,

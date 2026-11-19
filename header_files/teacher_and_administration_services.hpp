@@ -251,7 +251,13 @@ public:
     explicit AdministratorService(SystemContext& context);
 
     // UC13 Manage Courses and Teaching Classes
-    OperationResult create_course(const UserIdentity& user, const Course& course);
+    //
+    // 创建课程必须同时给出首个教学班：URS 6.7 要求每门课程至少有一个教学班，
+    // 任一检查失败则课程与教学班都不写入（不留下零教学班课程）。
+    // 单独的 create_course() 已移除；恢复/导入历史数据请直接构造 SystemContext。
+    OperationResult create_course_with_teaching_class(
+        const UserIdentity& user, const Course& course,
+        const TeachingClass& first_teaching_class);
     OperationResult update_course(const UserIdentity& user, const Course& course);
     OperationResult remove_course(const UserIdentity& user, int course_id);
     OperationResult create_teaching_class(const UserIdentity& user,
