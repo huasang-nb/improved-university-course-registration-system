@@ -190,6 +190,7 @@ SystemContext make_seed_context();
 - [ ] 是否同意 `save_state` 改为非 const（为了保存前 observe）？
 - [ ] 是否同意账号统一为 trim+lower（已改 `find_*_by_number`，见
       `interface_change_request.md` 第八节）？
-- [ ] 累计学分已改用 `long long`；核心 `enroll()` 与管理员的
-      `update_course()` 仍是 `int` 累加，存在同样的溢出，需按分工另行处理。
+- [ ] 累计学分：持久化校验已用 `long long`；管理员侧 `update_course()` 也已由 Zhu 改为
+      `long long`（2026-11-19）。选课核心 `enroll()` 仍是 `int` 累加，由 Yuhua 在其分支修复，
+      合并时保留他的版本。
 - [ ] 默认路径 `data/state.json` 是否合适？

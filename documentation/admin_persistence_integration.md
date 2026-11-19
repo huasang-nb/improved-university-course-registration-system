@@ -115,7 +115,9 @@ CMakeLists 说明：新增 `persistent_administration_service` 库（依赖 `per
 `persistent_administration_tests` 可执行文件与 `add_test(NAME persistent_administration ...)`；
 MSVC 下项目级加了 `/utf-8`（源码含中文注释，缺省代码页会误读）。
 
-失败路径已验证会返回非零：故意把学分累计改回 `int` 时，测试打印 `FAIL` 并返回 1。
+失败路径已验证会返回非零：把管理员侧 `update_course()` 的学分累计临时改回 `int` 时，
+测试打印 `FAIL` 并返回 1。（选课核心 `enroll()` 的同类问题由 Yuhua 在其分支修复，
+本分支未改动该文件。）
 
 ## 7. 新增测试覆盖
 
