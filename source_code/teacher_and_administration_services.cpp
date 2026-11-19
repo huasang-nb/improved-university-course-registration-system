@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <ctime>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace course_registration {
@@ -100,6 +101,19 @@ std::string to_lower(const std::string& text) {
     return result;
 }
 
+const char* role_name(Role role) {
+    switch (role) {
+        case Role::Student:
+            return "student";
+        case Role::Teacher:
+            return "teacher";
+        case Role::Administrator:
+            return "administrator";
+    }
+    return "unknown";
+}
+
+
 std::string describe(const ClassMeeting& meeting) {
     return "day " + std::to_string(meeting.day_of_week) + " " +
            std::to_string(meeting.start_minute) + "-" +
@@ -125,6 +139,20 @@ bool teaching_classes_overlap(const TeachingClass& left,
             if (meetings_overlap(left_meeting, right_meeting)) {
                 return true;
             }
+        }
+    }
+    return false;
+}
+
+// URS 6.7：每门 Course 至少有一个 TeachingClass。
+// 判断"除 excluded 之外，这门课程是否还有别的教学班"。
+bool course_has_other_teaching_class(
+    const std::vector<TeachingClass>& classes, int course_id,
+    int excluded_teaching_class_id) {
+    for (const TeachingClass& teaching_class : classes) {
+        if (teaching_class.course_id == course_id &&
+            teaching_class.teaching_class_id != excluded_teaching_class_id) {
+            return true;
         }
     }
     return false;
@@ -281,6 +309,7 @@ const Student* SystemContext::find_student_by_number(
     for (const Student& student : students_) {
         if (normalize_account_key(student.student_number) ==
             normalize_account_key(number)) {
+
             return &student;
         }
     }
@@ -292,10 +321,50 @@ const Teacher* SystemContext::find_teacher_by_number(
     for (const Teacher& teacher : teachers_) {
         if (normalize_account_key(teacher.teacher_number) ==
             normalize_account_key(number)) {
+
             return &teacher;
         }
     }
     return nullptr;
+}
+
+bool SystemContext::find_account_owner(const std::string& number,
+                                      Role exclude_role, int exclude_id,
+                                      Role& owner,
+                                      std::string& owner_number) const {
+    const std::string target = normalize_account_key(number);
+    for (const Student& student : students_) {
+        if (exclude_role == Role::Student && student.student_id == exclude_id) {
+            continue;
+        }
+        if (normalize_account_key(student.student_number) == target) {
+            owner = Role::Student;
+            owner_number = student.student_number;
+            return true;
+        }
+    }
+    for (const Teacher& teacher : teachers_) {
+        if (exclude_role == Role::Teacher && teacher.teacher_id == exclude_id) {
+            continue;
+        }
+        if (normalize_account_key(teacher.teacher_number) == target) {
+            owner = Role::Teacher;
+            owner_number = teacher.teacher_number;
+            return true;
+        }
+    }
+    for (const Administrator& administrator : administrators_) {
+        if (exclude_role == Role::Administrator &&
+            administrator.administrator_id == exclude_id) {
+            continue;
+        }
+        if (normalize_account_key(administrator.account_number) == target) {
+            owner = Role::Administrator;
+            owner_number = administrator.account_number;
+            return true;
+        }
+    }
+    return false;
 }
 
 bool SystemContext::find_course(int course_id, Course& course) const {
@@ -723,14 +792,50 @@ OperationResult AdministratorService::remove_course(const UserIdentity& user,
             ++referencing_classes;
         }
     }
-    if (referencing_classes > 0) {
+    if (referencing_classes == 0) {
+        context_.remove_course_record(course_id);
+        return {ResultCode::Success, "course " + existing.course_code + " removed"};
+    }
+
+    // 课程下还有教学班：只有在没有任何选退课记录时才连同教学班一起删除。
+    // 有记录（无论是 Active 还是只有 Dropped）都必须保留课程与班级的归属关系，
+    // 因为退课记录同样是历史，单纯"先退课"并不能让课程变成可删除。
+    std::vector<int> class_ids;
+    for (const TeachingClass& teaching_class : context_.teaching_classes()) {
+        if (teaching_class.course_id == course_id) {
+            class_ids.push_back(teaching_class.teaching_class_id);
+        }
+    }
+    int active = 0;
+    int dropped = 0;
+    for (const Enrollment& enrollment : context_.all_enrollments()) {
+        if (std::find(class_ids.begin(), class_ids.end(),
+                      enrollment.teaching_class_id) == class_ids.end()) {
+            continue;
+        }
+        if (enrollment.status == EnrollmentStatus::Active) {
+            ++active;
+        } else {
+            ++dropped;
+        }
+    }
+    if (active + dropped > 0) {
         return {ResultCode::CatalogInUse,
-                "course " + existing.course_code + " still has " +
-                    std::to_string(referencing_classes) +
-                    " teaching class(es); remove them first"};
+                "course " + existing.course_code + " has " +
+                    std::to_string(referencing_classes) + " teaching class(es) with " +
+                    std::to_string(active + dropped) + " enrollment record(s) (" +
+                    std::to_string(active) + " active, " + std::to_string(dropped) +
+                    " dropped) that must be kept for history; dropping the records "
+                    "does not make the course deletable"};
+    }
+
+    for (int teaching_class_id : class_ids) {
+        context_.remove_teaching_class_record(teaching_class_id);
     }
     context_.remove_course_record(course_id);
-    return {ResultCode::Success, "course " + existing.course_code + " removed"};
+    return {ResultCode::Success,
+            "course " + existing.course_code + " removed together with " +
+                std::to_string(referencing_classes) + " teaching class(es)"};
 }
 
 OperationResult AdministratorService::create_teaching_class(
@@ -754,6 +859,8 @@ OperationResult AdministratorService::create_teaching_class(
                     "invalid class meeting: " + describe(meeting)};
         }
     }
+    // 已确认的业务行为：同一个教学班内部允许时段重叠（例如同一门课分在小班上课），
+    // 因此这里不做"班级内部自冲突"校验；只校验教师跨教学班的排课冲突。
     for (const TeachingClass& existing : context_.teaching_classes()) {
         if (existing.teaching_class_id == teaching_class.teaching_class_id) {
             return {ResultCode::DuplicateIdentifier,
@@ -836,6 +943,20 @@ OperationResult AdministratorService::update_teaching_class(
                 "teacher_id " + std::to_string(teaching_class.teacher_id) +
                     " not found"};
     }
+    // 与 create_teaching_class() 保持一致：停用账号不能被**安排或改派**教学班。
+    // 只在"换人"时拦截；原班教师被停用后，管理员能否继续改该班的时间与容量
+    // 属于另一个待确认问题，这里不扩大限制（保持改动前的行为：允许）。
+    if (teaching_class.teacher_id != existing.teacher_id &&
+        !teacher->account_active) {
+        const Teacher* current = context_.find_teacher(existing.teacher_id);
+        return {ResultCode::InvalidInput,
+                "teacher " + teacher->teacher_number +
+                    " is not an active account and cannot be assigned to teaching "
+                    "class " +
+                    std::to_string(existing.teaching_class_id) + "; it keeps " +
+                    (current == nullptr ? std::string("its current teacher")
+                                        : current->teacher_number)};
+    }
 
     const int active = context_.enrollment_count(
         teaching_class.teaching_class_id);
@@ -853,6 +974,22 @@ OperationResult AdministratorService::update_teaching_class(
                     std::to_string(teaching_class.course_id) + " while it has " +
                     std::to_string(active) +
                     " active enrollment(s); ask the students to drop first"};
+    }
+
+    // URS 6.7：每门 Course 至少保留一个 TeachingClass。把某门课程最后一个教学班
+    // 移到别的课程，会让原课程变成没有教学班的课程，因此拒绝并保留原数据。
+    if (teaching_class.course_id != existing.course_id) {
+        if (!course_has_other_teaching_class(context_.teaching_classes(),
+                                             existing.course_id,
+                                             existing.teaching_class_id)) {
+            Course source{};
+            context_.find_course(existing.course_id, source);
+            return {ResultCode::CatalogInUse,
+                    "teaching class " +
+                        std::to_string(existing.teaching_class_id) +
+                        " is the last one of course " + source.course_code +
+                        "; a course must keep at least one teaching class"};
+        }
     }
 
     if (teaching_class.capacity < active) {
@@ -950,6 +1087,18 @@ OperationResult AdministratorService::remove_teaching_class(
                     " has " + std::to_string(dropped) +
                     " dropped enrollment record(s) kept as history; "
                     "archiving is out of the current scope"};
+    }
+
+    // URS 6.7：每门课程至少保留一个教学班，不能把最后一个班删掉。
+    if (!course_has_other_teaching_class(context_.teaching_classes(),
+                                         existing.course_id,
+                                         teaching_class_id)) {
+        Course course{};
+        context_.find_course(existing.course_id, course);
+        return {ResultCode::CatalogInUse,
+                "teaching class " + std::to_string(teaching_class_id) +
+                    " is the last one of course " + course.course_code +
+                    "; a course must keep at least one teaching class"};
     }
 
     context_.remove_teaching_class_record(teaching_class_id);
@@ -1097,6 +1246,17 @@ OperationResult AdministratorService::create_student(
                 "student_number " + student.student_number +
                     " already exists"};
     }
+    // 跨角色查重：登录账号在学生、教师、管理员之间必须唯一。
+    Role owner{};
+    std::string owner_number;
+    if (context_.find_account_owner(student.student_number, Role::Student,
+                                    student.student_id, owner,
+                                    owner_number)) {
+        return {ResultCode::DuplicateIdentifier,
+                "student_number " + student.student_number +
+                    " is already used by " + role_name(owner) + " " +
+                    owner_number};
+    }
     context_.apply_student_change(student);
     return {ResultCode::Success,
             "student " + student.student_number + " created"};
@@ -1124,6 +1284,17 @@ OperationResult AdministratorService::update_student(
                     " is used by student_id " +
                     std::to_string(by_number->student_id)};
     }
+    // 跨角色查重：改成别的角色已在用的账号同样要拒绝，排除自身。
+    Role owner{};
+    std::string owner_number;
+    if (context_.find_account_owner(student.student_number, Role::Student,
+                                    student.student_id, owner,
+                                    owner_number)) {
+        return {ResultCode::DuplicateIdentifier,
+                "student_number " + student.student_number +
+                    " is already used by " + role_name(owner) + " " +
+                    owner_number};
+    }
     context_.apply_student_change(student);
     return {ResultCode::Success,
             "student " + student.student_number + " updated"};
@@ -1142,13 +1313,30 @@ OperationResult AdministratorService::remove_student(const UserIdentity& user,
     // 缺陷-006 修复：先复制学号。删除会 erase 掉 vector 元素，
     // 之后 existing 是悬空指针，读出来可能是另一个学生的编号。
     const std::string student_number = existing->student_number;
-    const int active = static_cast<int>(
-        context_.active_enrollments(student_id).size());
-    if (active > 0) {
+
+    // URS 团队约定（2026-11-07 确认）：只要存在任何选课或退课记录，就禁止删除学生。
+    // 只允许在完全没有记录时删除；Dropped 记录同样是历史，删掉学生后编号复用会让
+    // 旧记录归到新学生名下。需要限制使用时请停用账号（account_active = false）。
+    int active = 0;
+    int dropped = 0;
+    for (const Enrollment& enrollment : context_.all_enrollments()) {
+        if (enrollment.student_id != student_id) {
+            continue;
+        }
+        if (enrollment.status == EnrollmentStatus::Active) {
+            ++active;
+        } else {
+            ++dropped;
+        }
+    }
+    if (active + dropped > 0) {
         return {ResultCode::CatalogInUse,
-                "student " + student_number + " still has " +
-                    std::to_string(active) +
-                    " active enrollment(s); drop them first"};
+                "student " + student_number + " has " +
+                    std::to_string(active + dropped) +
+                    " enrollment record(s) (" + std::to_string(active) +
+                    " active, " + std::to_string(dropped) +
+                    " dropped) that must be kept as history; deactivate the "
+                    "account instead of removing it"};
     }
     context_.remove_student_record(student_id);
     return {ResultCode::Success, "student " + student_number + " removed"};
@@ -1178,6 +1366,17 @@ OperationResult AdministratorService::create_teacher(
                 "teacher_number " + teacher.teacher_number +
                     " already exists"};
     }
+    // 跨角色查重：登录账号在学生、教师、管理员之间必须唯一。
+    Role owner{};
+    std::string owner_number;
+    if (context_.find_account_owner(teacher.teacher_number, Role::Teacher,
+                                    teacher.teacher_id, owner,
+                                    owner_number)) {
+        return {ResultCode::DuplicateIdentifier,
+                "teacher_number " + teacher.teacher_number +
+                    " is already used by " + role_name(owner) + " " +
+                    owner_number};
+    }
     context_.apply_teacher_change(teacher);
     return {ResultCode::Success,
             "teacher " + teacher.teacher_number + " created"};
@@ -1204,6 +1403,17 @@ OperationResult AdministratorService::update_teacher(
                 "teacher_number " + teacher.teacher_number +
                     " is used by teacher_id " +
                     std::to_string(by_number->teacher_id)};
+    }
+    // 跨角色查重：改成别的角色已在用的账号同样要拒绝，排除自身。
+    Role owner{};
+    std::string owner_number;
+    if (context_.find_account_owner(teacher.teacher_number, Role::Teacher,
+                                    teacher.teacher_id, owner,
+                                    owner_number)) {
+        return {ResultCode::DuplicateIdentifier,
+                "teacher_number " + teacher.teacher_number +
+                    " is already used by " + role_name(owner) + " " +
+                    owner_number};
     }
     context_.apply_teacher_change(teacher);
     return {ResultCode::Success,
@@ -1300,9 +1510,38 @@ OperationResult AdministratorService::check_data_integrity(
         }
     }
 
+    // URS 6.7：每门课程至少要有一个教学班。放在教学班循环之后，
+    // 这样已有问题的顺序（先报教学班自身）保持不变。
+    for (const Course& course : courses) {
+        if (!course_has_other_teaching_class(classes, course.course_id, -1)) {
+            problems.push_back("course " + course.course_code +
+                               " has no teaching class");
+        }
+    }
+
     // 同一学生对同一教学班只应有一条有效记录。
     for (std::size_t left = 0; left < enrollments.size(); ++left) {
         if (enrollments[left].status != EnrollmentStatus::Active) {
+            // 已退课记录同样是历史：学生资料被删掉后，旧记录会归到复用该编号的新人，
+            // 因此这里也检查 Dropped 记录的学生是否存在。
+            if (context_.find_student(enrollments[left].student_id) == nullptr) {
+                problems.push_back(
+                    "dropped enrollment refers to missing student_id " +
+                    std::to_string(enrollments[left].student_id) +
+                    " in teaching class " +
+                    std::to_string(enrollments[left].teaching_class_id));
+            }
+            // 教学班被删掉（或恢复的数据里不含它）时，退课记录会变成悬空历史，
+            // 同样要报出来；正常的 Dropped 记录（班还在）不报错。
+            TeachingClass dropped_class{};
+            if (!context_.find_teaching_class(enrollments[left].teaching_class_id,
+                                              dropped_class)) {
+                problems.push_back(
+                    "dropped enrollment of student " +
+                    std::to_string(enrollments[left].student_id) +
+                    " refers to missing teaching_class_id " +
+                    std::to_string(enrollments[left].teaching_class_id));
+            }
             continue;
         }
         TeachingClass enrolled_class{};
@@ -1365,6 +1604,32 @@ OperationResult AdministratorService::check_data_integrity(
                         std::to_string(taken[right].teaching_class_id));
                 }
             }
+        }
+    }
+
+    // 跨角色账号查重：登录账号（学号 / 工号 / 管理员账号）全局唯一。
+    // 已有的重复数据（历史导入、早期版本写入）在这里一次性报出。
+    std::vector<std::pair<std::string, std::string>> accounts;
+    for (const Student& student : context_.students()) {
+        accounts.push_back({normalize_account_key(student.student_number),
+                            "student " + student.student_number});
+    }
+    for (const Teacher& teacher : context_.teachers()) {
+        accounts.push_back({normalize_account_key(teacher.teacher_number),
+                            "teacher " + teacher.teacher_number});
+    }
+    for (const Administrator& administrator : context_.administrators()) {
+        accounts.push_back({normalize_account_key(administrator.account_number),
+                            "administrator " + administrator.account_number});
+    }
+    for (std::size_t left = 0; left < accounts.size(); ++left) {
+        for (std::size_t right = left + 1; right < accounts.size(); ++right) {
+            if (accounts[left].first != accounts[right].first) {
+                continue;
+            }
+            problems.push_back("account number " + accounts[left].second +
+                               " collides with " + accounts[right].second +
+                               "; login accounts must be unique across roles");
         }
     }
 

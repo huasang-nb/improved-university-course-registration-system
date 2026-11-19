@@ -147,6 +147,14 @@ public:
     const Student* find_student_by_number(const std::string& number) const;
     const Teacher* find_teacher_by_number(const std::string& number) const;
 
+    // 跨角色账号查重：登录账号（学号 / 工号 / 管理员账号）在三种角色之间必须唯一。
+    // 命中时返回 true，并给出占用者的角色与账号；大小写不敏感。
+    // exclude_role + exclude_id 用于"修改自己"时排除自身记录；
+    // id 为正数才可能命中，传 0 相当于不排除。
+    bool find_account_owner(const std::string& number, Role exclude_role,
+                            int exclude_id, Role& owner,
+                            std::string& owner_number) const;
+
     // 以 bool + 输出参数代替返回指针，因为目录是快照。
     bool find_course(int course_id, Course& course) const;
     bool find_teaching_class(int teaching_class_id,
