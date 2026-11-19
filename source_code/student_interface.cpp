@@ -16,6 +16,8 @@ StudentInterface::StudentInterface(SystemContext& context,
     : context_(context), options_(std::move(options)) {}
 
 OperationResult StudentInterface::login(const std::string& account_number) {
+    // 切换账号失败时回到未登录，避免继续沿用上一个学生的身份。
+    logout();
     const Student* student = context_.find_student_by_number(account_number);
     if (student == nullptr) {
         return {ResultCode::RecordNotFound, "student account not found"};
@@ -39,6 +41,12 @@ void StudentInterface::logout() {
 OperationResult StudentInterface::require_login() const {
     if (!logged_in_) {
         return {ResultCode::PermissionDenied, "please log in first"};
+    }
+    // 登录后账号可能被停用：读取与选退课都按同一口径拒绝。
+    const Student* student = context_.find_student(identity_.user_id);
+    if (student == nullptr || !student->account_active) {
+        return {ResultCode::PermissionDenied,
+                "student account is no longer active"};
     }
     return {ResultCode::Success, "ok"};
 }

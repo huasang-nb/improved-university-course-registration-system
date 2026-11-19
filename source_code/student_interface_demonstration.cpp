@@ -1,8 +1,8 @@
 // 学生端控制台演示（Zhang Yikai，第 3 周）
 //
-// 用法：student_interface_demonstration [--state PATH]
+// 用法：student_interface_demonstration --state PATH
 // 先输入学号模拟登录，然后用菜单做搜索/详情/余量/课表/选课/退课。
-// 选退课会写入 PATH（默认 data/state.json），重启后数据仍在。
+// --state 必须显式指定测试用文件，演示不会写入默认的 data/state.json。
 
 #include "student_interface.hpp"
 
@@ -46,10 +46,14 @@ void print_course(const CourseView& view) {
 }  // namespace
 
 int main(int argc, char** argv) {
-    StorageOptions storage;
-    if (argc >= 3 && std::string(argv[1]) == "--state") {
-        storage.path = argv[2];
+    // 必须显式指定测试用状态文件，避免演示时把选退课写进默认的 data/state.json。
+    if (argc != 3 || std::string(argv[1]) != "--state") {
+        std::cerr << "用法：student_interface_demonstration --state PATH\n"
+                     "必须显式指定测试用状态文件（不会写入 data/state.json）。\n";
+        return 2;
     }
+    StorageOptions storage;
+    storage.path = argv[2];
 
     SystemContext context = make_seed_context();
     const OperationResult initialized = initialize_storage(storage, context);

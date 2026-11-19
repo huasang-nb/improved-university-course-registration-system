@@ -70,7 +70,9 @@ bool StudentQueryService::course_matches(
                 continue;
             }
             const Teacher* teacher = context_.find_teacher(teaching_class.teacher_id);
-            if (teacher != nullptr &&
+            // 教师姓名只在实际会显示的班（教师仍启用）里匹配；否则停用教师的班
+            // 被隐藏后，仍会靠他的名字把别的老师的班带出来。
+            if (teacher != nullptr && teacher->account_active &&
                 contains_text(to_lower(teacher->name), lowered_keyword)) {
                 return true;
             }
@@ -92,7 +94,7 @@ bool StudentQueryService::course_matches(
             continue;
         }
         const Teacher* teacher = context_.find_teacher(teaching_class.teacher_id);
-        if (teacher != nullptr &&
+        if (teacher != nullptr && teacher->account_active &&
             contains_text(to_lower(teacher->name), lowered_keyword)) {
             return true;
         }

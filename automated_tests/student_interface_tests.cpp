@@ -155,6 +155,11 @@ int main() {
         CHECK(has_course1);
         CHECK(!has_class10);
 
+        // 教师姓名只在实际显示的班里匹配：停用 Wang 后搜 "Wang" 应为空，
+        // 不能靠已隐藏的班命中、再把 Zhao 的班带出来。
+        CHECK(scoped.search("Wang", found).code == ResultCode::Success);
+        CHECK(found.empty());
+
         // 课程 2 只有 class 20（teacher 200）→ 停用后整门从可选列表消失
         Teacher li = state.teachers()[1];
         li.account_active = false;
@@ -178,6 +183,37 @@ int main() {
             }
         }
         CHECK(detail_has_class10);
+    }
+
+    // ==================================================================
+    // 23. 模拟登录：切换失败回到未登录；登录后被停用则读取也拒绝。
+    // ==================================================================
+    {
+        SystemContext state = make_seed_context();
+        StudentInterface ui3(state, options);
+        CHECK(ui3.login("S2023001").code == ResultCode::Success);
+        CHECK(ui3.logged_in() == true);
+
+        // 切换到不存在的账号：失败并回到未登录
+        CHECK(ui3.login("S9999999").code == ResultCode::RecordNotFound);
+        CHECK(ui3.logged_in() == false);
+        std::vector<TimetableEntry> table;
+        CHECK(ui3.timetable(table).code == ResultCode::PermissionDenied);
+        CHECK(ui3.enroll(10).code == ResultCode::PermissionDenied);
+
+        // 登录后被停用：课表、个人状态、搜索、选课都拒绝
+        CHECK(ui3.login("S2023001").code == ResultCode::Success);
+        Student student = state.students()[0];
+        student.account_active = false;
+        state.apply_student_change(student);
+        CHECK(ui3.timetable(table).code == ResultCode::PermissionDenied);
+        int active = 0;
+        int dropped = 0;
+        CHECK(ui3.my_status(active, dropped).code ==
+              ResultCode::PermissionDenied);
+        std::vector<CourseView> found;
+        CHECK(ui3.search("SE", found).code == ResultCode::PermissionDenied);
+        CHECK(ui3.enroll(10).code == ResultCode::PermissionDenied);
     }
 
     if (g_failures != 0) {
