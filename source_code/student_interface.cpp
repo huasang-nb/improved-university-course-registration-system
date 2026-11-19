@@ -42,11 +42,14 @@ OperationResult StudentInterface::require_login() const {
     if (!logged_in_) {
         return {ResultCode::PermissionDenied, "please log in first"};
     }
-    // 登录后账号可能被停用：读取与选退课都按同一口径拒绝。
+    // 登录后账号可能被停用，或学号被管理员改过：会话账号必须与当前学号
+    // 按统一规则（去首尾空白 + 转小写）一致，否则读取和选退课都拒绝。
     const Student* student = context_.find_student(identity_.user_id);
-    if (student == nullptr || !student->account_active) {
+    if (student == nullptr || !student->account_active ||
+        normalize_account_key(identity_.account_number) !=
+            normalize_account_key(student->student_number)) {
         return {ResultCode::PermissionDenied,
-                "student account is no longer active"};
+                "student account is no longer valid"};
     }
     return {ResultCode::Success, "ok"};
 }

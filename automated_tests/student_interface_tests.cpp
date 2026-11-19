@@ -216,6 +216,36 @@ int main() {
         CHECK(ui3.enroll(10).code == ResultCode::PermissionDenied);
     }
 
+    // ==================================================================
+    // 24. 管理员改学号后，旧会话的读取与选退课都要拒绝。
+    // ==================================================================
+    {
+        SystemContext state = make_seed_context();
+        StudentInterface ui4(state, options);
+        CHECK(ui4.login("S2023001").code == ResultCode::Success);
+
+        AdministratorService admin(state);
+        const UserIdentity admin_user{900, "A2020001", Role::Administrator};
+        Student student = state.students()[0];
+        student.student_number = "S2023099";
+        CHECK(admin.update_student(admin_user, student).code ==
+              ResultCode::Success);
+
+        // 旧身份：课表、个人状态、选课都拒绝
+        std::vector<TimetableEntry> table;
+        CHECK(ui4.timetable(table).code == ResultCode::PermissionDenied);
+        int active = 0;
+        int dropped = 0;
+        CHECK(ui4.my_status(active, dropped).code ==
+              ResultCode::PermissionDenied);
+        CHECK(ui4.enroll(10).code == ResultCode::PermissionDenied);
+
+        // 旧学号不能再登录；新学号可以
+        CHECK(ui4.login("S2023001").code == ResultCode::RecordNotFound);
+        CHECK(ui4.login("S2023099").code == ResultCode::Success);
+        CHECK(ui4.timetable(table).code == ResultCode::Success);
+    }
+
     if (g_failures != 0) {
         std::cerr << "FAILED: " << g_failures << " check(s)\n";
         return 1;
