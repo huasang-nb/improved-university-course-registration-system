@@ -142,12 +142,13 @@ OperationResult RegistrationService::enroll(
     }
 
     // 5. 总学分不能超过当前规则中的上限。
-    int current_credits = 0;
+    long long current_credits = 0;
     for (const TeachingClass* current_class : current_classes) {
         const Course* course = find_course(current_class->course_id);
-        current_credits += course->credits;
+        current_credits += static_cast<long long>(course->credits);
     }
-    if (current_credits + requested_course->credits > rule_.maximum_credits) {
+    if (current_credits + static_cast<long long>(requested_course->credits) >
+        static_cast<long long>(rule_.maximum_credits)) {
         return {ResultCode::CreditLimitExceeded, "Credit limit exceeded"};
     }
 

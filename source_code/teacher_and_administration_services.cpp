@@ -309,7 +309,6 @@ const Student* SystemContext::find_student_by_number(
     for (const Student& student : students_) {
         if (normalize_account_key(student.student_number) ==
             normalize_account_key(number)) {
-
             return &student;
         }
     }
@@ -321,7 +320,6 @@ const Teacher* SystemContext::find_teacher_by_number(
     for (const Teacher& teacher : teachers_) {
         if (normalize_account_key(teacher.teacher_number) ==
             normalize_account_key(number)) {
-
             return &teacher;
         }
     }
