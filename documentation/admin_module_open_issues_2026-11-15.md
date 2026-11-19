@@ -16,7 +16,7 @@
 | 数据存放 | 全部在内存：`SystemContext` 持有人员，`RegistrationService` 持有课程、教学班、选课记录、规则 |
 | 管理员账号维护 | **没有**入口（`AdministratorService` 只有学生、教师），跨角色查重目前三缺一 |
 | 课程删除 | `remove_course()` 要求 0 个教学班；`remove_teaching_class()` 又禁止删最后一个班 → 正常数据下课程删不掉 |
-| 测试 | `.\build_and_test.ps1` 全过；教师/管理员 **434 checks / 0 failures**；选课规则与学生查询两套全绿 |
+| 测试 | 在 MSVC 2022（`cl /utf-8`）下 8 个目标全部编译；5 套测试通过：教师/管理员 **483 checks / 0 failures**、持久化入口 89 项、选课规则/学生查询/持久化三套全绿。本机 GCC 8.1 无法编译持久化目标（`<filesystem>`），命令见 `admin_persistence_integration.md` 第 6 节 |
 
 ## 1. 修改后怎样调用保存接口，哪些操作需要一起保存
 
@@ -123,15 +123,14 @@ OperationResult create_course_with_teaching_class(
 **内部数字 ID**：继续待确认。若要求全局唯一，需统一 ID 空间与生成规则，属于另一件改动，
 本次未重构。
 
-## 4.1 仍待接口对齐的两项
+## 4.1 已完成（2026-11-19）
 
-1. **「课程 + 首个教学班」原子创建**：等三人确认 `create_course_with_teaching_class()` 的签名后再实现。
-   同时要**真正收口旧入口**，不能只写注释：计划是新增导入专用入口
-   `restore_courses()`（仅由存储恢复调用），把 `create_course()` 从公开接口移除；
-   现有 3 处直接调用 `create_course()` 的测试会一起改。
-2. **管理员修改接入持久化**：等 Kai 的保存接口稳定。执行方式为
-   "在临时副本上执行 → 保存成功后再替换共享状态 → 保存失败则原数据不变"，
-   即对 `SystemContext` 做 copy-on-write，而不是就地修改。
+1. **「课程 + 首个教学班」原子创建**：`create_course_with_teaching_class(user, course, first_class)`
+   已实现；旧的单独 `create_course()` 已从公开接口移除，测试/演示改用新入口，
+   损坏数据用底层 `apply_course_change` 构造。
+2. **管理员修改接入持久化**：新增 `PersistentAdministratorService`，在临时 `SystemContext`
+   副本上执行业务校验，`save_state` 成功后才发布；业务拒绝或保存失败时正式状态与文件都不变。
+   用法与实测见 `documentation/admin_persistence_integration.md`。
 
 ## 4.2 停用教师与已有教学班（待确认）
 
@@ -146,7 +145,7 @@ OperationResult create_course_with_teaching_class(
 | 分支 | `feature/zhu-ziliang-admin-consistency` |
 | 最新提交 | `f6cd49a`（已推送；领先 main 1 个提交，**未合入 main**；main 当前 `b9b52df`） |
 | 提交内容 | 课程至少保留一个教学班、停用教师不可改派、有选退课记录的学生禁止删除 |
-| 测试 | `.\build_and_test.ps1` 全过：三套测试；教师/管理员 434 项断言、0 失败 |
+| 测试 | MSVC 2022 实测：教师/管理员 483 项断言、持久化入口 89 项、其余三套全绿（命令见 `admin_persistence_integration.md`） |
 
 **需要 Yuhua 确认**
 
@@ -163,8 +162,11 @@ OperationResult create_course_with_teaching_class(
 4. 新分支 `feature/zhang-yuhua-registration-acceptance` 的 574 项联调检查若调用了
    `create_course()`，需要一起改。
 
-**进度（2026-11-18）**
+**进度（2026-11-19）**
 
 - 已完成并复核：跨角色账号查重、课程删除级联、停用教师口径收敛、Dropped 悬空记录检查。
-- 仍需推进：①「课程 + 首个教学班」原子创建（等三人确认接口签名，并真正收口旧 `create_course()`）；
-  ②管理员修改接入持久化（等 Kai 的 `save_state` / `load_state` 稳定，按 copy-on-write 执行）。
+- 本轮已完成：学分累计溢出修复、课程与首班原子创建（旧入口移除）、管理员修改接入持久化
+  （`PersistentAdministratorService`）及对应成功/失败/重启测试。
+- 仍未确认：①原班教师被停用后能否改该班时间与容量（当前不扩大限制，允许）；
+  ②内部数字 ID 是否跨角色唯一（未改动）。
+- 未在本次范围：管理员账号维护页面、课程归档/停用、批量导入。

@@ -111,12 +111,17 @@ remaining_seats   = TeachingClass.capacity - active_count(tc)
 
 | 接口 | 失败原因 |
 |---|---|
-| `create_course` / `update_course` / `remove_course` | `PermissionDenied`、`InvalidInput`、`DuplicateIdentifier`、`RecordNotFound`、`CatalogInUse`（仍有教学班）、`CreditLimitExceeded`（改学分使学生超限） |
-| `create_teaching_class` / `update_teaching_class` / `remove_teaching_class` | `PermissionDenied`、`InvalidInput`（非法时段/容量≤0/停用教师）、`DuplicateIdentifier`、`RecordNotFound`（课程或教师不存在）、`TimeConflict`（教师或已选学生冲突）、`CatalogInUse`（仍有选课记录，或会删掉/移走课程最后一个教学班）、`CapacityBelowEnrollment` |
+| `create_course_with_teaching_class(user, course, first_class)` | `PermissionDenied`、`InvalidInput`、`DuplicateIdentifier`、`RecordNotFound`（教师不存在）、`TimeConflict`（教师排课冲突）。任一失败课程与教学班都不写入；**单独的 `create_course` 已移除** |
+| `update_course` / `remove_course` | `PermissionDenied`、`InvalidInput`、`DuplicateIdentifier`、`RecordNotFound`、`CatalogInUse`（有选退课记录时不能删课程）、`CreditLimitExceeded`（改学分使学生超限，按 `long long` 累计） |
+| `create_teaching_class` / `update_teaching_class` / `remove_teaching_class` | `PermissionDenied`、`InvalidInput`（非法时段/容量≤0/改派给停用教师）、`DuplicateIdentifier`、`RecordNotFound`（课程或教师不存在）、`TimeConflict`（教师或已选学生冲突）、`CatalogInUse`（仍有选课记录，或会删掉/移走课程最后一个教学班）、`CapacityBelowEnrollment` |
 | `set_teaching_class_capacity` | `PermissionDenied`、`InvalidInput`、`TeachingClassNotFound`、`CapacityBelowEnrollment` |
 | `set_registration_period` / `set_maximum_credits` / `close_registration` | `PermissionDenied`、`InvalidInput`（格式错误或起止颠倒；本轮已开放过仍试图改学分上限） |
-| `create_student` / `update_student` / `remove_student`、`create_teacher` / `update_teacher` / `remove_teacher` | `PermissionDenied`、`InvalidInput`（空字段）、`DuplicateIdentifier`（编号或学号/工号重复）、`RecordNotFound`、`CatalogInUse`（学生有任何选退课记录 / 教师仍负责教学班） |
+| `create_student` / `update_student` / `remove_student`、`create_teacher` / `update_teacher` / `remove_teacher` | `PermissionDenied`、`InvalidInput`（空字段）、`DuplicateIdentifier`（编号或学号/工号重复，含跨角色重名）、`RecordNotFound`、`CatalogInUse`（学生有任何选退课记录 / 教师仍负责教学班） |
 | `check_data_integrity(identity, problems)` | `PermissionDenied`；发现不一致时返回 `InvalidInput` 并逐条列出问题 |
+
+**页面与后续接口应调用持久化入口** `PersistentAdministratorService`（同一组方法名），
+它在临时副本上执行业务校验、保存成功后才发布；失败时正式状态与文件都不变。
+用法、失败语义与实测环境见 `documentation/admin_persistence_integration.md`。
 
 ### 3.7.1 管理员维护必须遵守的业务规则（2026-11-07 确认）
 
