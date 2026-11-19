@@ -1,0 +1,33 @@
+管理员模块测试证据（Zhu Ziliang）—— 2026-11-19
+环境：Windows 11 · MSVC 2022（19.4x）· cl /std:c++17 /utf-8
+说明：本机 GCC 8.1 的 <filesystem> 不可用，无法编译持久化目标；
+      项目正式支持的环境为 GCC 9+ 或 MSVC 2017+（见 admin_persistence_integration.md）。
+
+命令行（逐目标，示例为管理员持久化测试）：
+  cl /nologo /utf-8 /std:c++17 /EHsc /Iheader_files /Fo:build\msvc\ /Fe:build\msvc\persist_admin_tests.exe ^
+     source_code\course_registration_business_rules.cpp ^
+     source_code\teacher_and_administration_services.cpp ^
+     source_code\persistence_service.cpp ^
+     source_code\persistent_administration_service.cpp ^
+     automated_tests\persistent_administration_tests.cpp
+
+运行结果：
+  course_registration_business_rules_tests   All registration tests passed                        exit=0
+  teacher_and_administration_services_tests  PASS: 483 checks, 0 failure(s)                       exit=0
+  student_query_and_timetable_tests          All student query and timetable tests passed         exit=0
+  persistence_tests                          All persistence tests passed                         exit=0
+  persistent_administration_tests            PASS: 89 checks, 0 failure(s)                        exit=0
+
+演示程序：
+  course_registration_console_demonstration  exit=0
+  teacher_and_administration_demonstration   exit=0
+  student_query_demonstration                exit=0
+
+NDEBUG 构建（/DNDEBUG）：
+  teacher_and_administration_services_tests  PASS: 483 checks, 0 failure(s)   exit=0
+  persistent_administration_tests            PASS: 89 checks, 0 failure(s)    exit=0
+
+失败路径验证：
+  将 update_course() 的学分累计临时改回 int 后重新编译，测试输出
+  "FAIL line 1406: overflow -> expected ResultCode 4, got 0 ..." 并返回 exit=1，
+  证明测试在普通构建下确实会因缺陷失败。

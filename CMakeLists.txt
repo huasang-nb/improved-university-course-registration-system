@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.16)
 project(course_registration_starter LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
+
+# 源码含中文注释：MSVC 缺省按本地代码页（936）读取会破坏字符串与代码结构。
+if (MSVC)
+    add_compile_options(/utf-8)
+endif()
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 if(MSVC)
     add_compile_options(/utf-8)
@@ -83,7 +88,7 @@ target_include_directories(persistence_service
 add_executable(persistence_tests
     automated_tests/persistence_tests.cpp)
 target_link_libraries(persistence_tests
-    PRIVATE persistence_service)
+    PRIVATE persistence_service student_query_and_timetable_services)
 add_test(NAME persistence COMMAND persistence_tests)
 
 if (MSVC)
@@ -132,3 +137,27 @@ add_executable(registration_storage_demonstration
     source_code/registration_storage_demonstration.cpp)
 target_link_libraries(registration_storage_demonstration
     PRIVATE persistent_registration_service)
+# ---------------------------------------------------------------------------
+# [Zhu Ziliang 追加] 管理员修改的持久化入口（副本执行业务 -> 保存 -> 发布）。
+# 只新增目标，不改动上面的目标名称与依赖。
+# ---------------------------------------------------------------------------
+add_library(persistent_administration_service
+    source_code/persistent_administration_service.cpp)
+target_link_libraries(persistent_administration_service
+    PUBLIC persistence_service)
+target_include_directories(persistent_administration_service
+    PUBLIC header_files)
+
+add_executable(persistent_administration_tests
+    automated_tests/persistent_administration_tests.cpp)
+target_link_libraries(persistent_administration_tests
+    PRIVATE persistent_administration_service)
+add_test(NAME persistent_administration
+         COMMAND persistent_administration_tests)
+
+if (MSVC)
+    target_compile_options(persistent_administration_service PRIVATE /W4)
+else()
+    target_compile_options(persistent_administration_service PRIVATE -Wall -Wextra)
+    target_compile_options(persistent_administration_tests PRIVATE -Wall -Wextra)
+endif()

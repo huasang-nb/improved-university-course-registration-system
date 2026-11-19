@@ -1,6 +1,10 @@
-# 接口提案：「课程 + 首个教学班」原子创建（待三人对齐）
+# 接口提案：「课程 + 首个教学班」原子创建（已实现）
 
-状态：**提案，尚未实现**。提出人 Zhu Ziliang，日期 2026-11-07。
+状态：**已实现（2026-11-19）**。最终签名与方案 A 一致：
+`create_course_with_teaching_class(user, course, first_teaching_class)`。
+旧的单独 `create_course()` 已从公开接口移除，测试与演示改用新入口；
+恢复/导入历史数据走底层构造（`apply_course_change`），不保留可绕过的公开入口。
+提出人 Zhu Ziliang，日期 2026-11-07。
 依据：URS 6.7「每门 Course 至少有一个 TeachingClass；创建课程时须提供教学班」，
 以及 2026-11-07 的《业务逻辑与后续需求核对》第一节。
 
@@ -12,9 +16,10 @@
 这是"两个公开调用 + 无事务"的问题，靠网页表单必填解决不了：业务接口本身允许只写课程。
 所以需要**一个调用同时校验并保存两者**，任一失败则两者都不写。
 
-## 二、本次已经做的部分（不改接口）
+## 二、先行落地的部分（不改接口）
 
-同一分支 `feature/zhu-ziliang-admin-consistency` 已提交：
+这些保护先于聚合接口落地，现位于分支 `feature/zhu-ziliang-admin-persistence`
+（原 `feature/zhu-ziliang-admin-consistency` 已并入）：
 
 | 改动 | 位置 | 失败返回 |
 |---|---|---|

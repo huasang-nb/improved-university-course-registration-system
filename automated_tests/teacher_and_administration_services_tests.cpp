@@ -9,6 +9,7 @@
 
 #include "teacher_and_administration_services.hpp"
 
+#include <climits>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -227,34 +228,43 @@ void test_uc13_course_validation() {
     Fixture fixture;
     AdministratorService administration(fixture.context);
 
-    CHECK_CODE(administration.create_course(fixture.admin,
-                                            {4, "PH101", "Physics", 3}),
+    CHECK_CODE(administration.create_course_with_teaching_class(
+                   fixture.admin, {4, "PH101", "Physics", 3},
+                   make_class(40, 4, 100, 2, 4, 600, 660, "A201")),
                ResultCode::Success);
     CHECK(fixture.context.courses().size() == 4);
+    CHECK(fixture.context.teaching_classes().size() == 5);
 
     // 编号与课程代码都不能重复。
-    CHECK_CODE(administration.create_course(fixture.admin,
-                                            {5, "PH101", "Physics II", 3}),
+    CHECK_CODE(administration.create_course_with_teaching_class(
+                   fixture.admin, {5, "PH101", "Physics II", 3},
+                   make_class(41, 5, 100, 2, 4, 700, 760, "A202")),
                ResultCode::DuplicateIdentifier);
-    CHECK_CODE(administration.create_course(fixture.admin,
-                                            {4, "PH102", "Physics III", 3}),
+    CHECK_CODE(administration.create_course_with_teaching_class(
+                   fixture.admin, {4, "PH102", "Physics III", 3},
+                   make_class(42, 4, 100, 2, 4, 700, 760, "A202")),
                ResultCode::DuplicateIdentifier);
     // 空名称、非正学分、非正编号都被拒绝。
-    CHECK_CODE(administration.create_course(fixture.admin,
-                                            {6, "PH103", "  ", 3}),
+    CHECK_CODE(administration.create_course_with_teaching_class(
+                   fixture.admin, {6, "PH103", "  ", 3},
+                   make_class(43, 6, 100, 2, 4, 700, 760, "A202")),
                ResultCode::InvalidInput);
-    CHECK_CODE(administration.create_course(fixture.admin,
-                                            {7, "PH104", "Physics IV", 0}),
+    CHECK_CODE(administration.create_course_with_teaching_class(
+                   fixture.admin, {7, "PH104", "Physics IV", 0},
+                   make_class(44, 7, 100, 2, 4, 700, 760, "A202")),
                ResultCode::InvalidInput);
-    CHECK_CODE(administration.create_course(fixture.admin,
-                                            {0, "PH105", "Physics V", 3}),
+    CHECK_CODE(administration.create_course_with_teaching_class(
+                   fixture.admin, {0, "PH105", "Physics V", 3},
+                   make_class(45, 0, 100, 2, 4, 700, 760, "A202")),
                ResultCode::InvalidInput);
 
     // 教师不能维护课程目录。
-    CHECK_CODE(administration.create_course(fixture.dr_wang,
-                                            {8, "PH106", "Physics VI", 3}),
+    CHECK_CODE(administration.create_course_with_teaching_class(
+                   fixture.dr_wang, {8, "PH106", "Physics VI", 3},
+                   make_class(46, 8, 100, 2, 4, 700, 760, "A203")),
                ResultCode::PermissionDenied);
     CHECK(fixture.context.courses().size() == 4);
+    CHECK(fixture.context.teaching_classes().size() == 5);
 
     // 修改不存在的课程返回 RecordNotFound。
     CHECK_CODE(administration.update_course(fixture.admin,
@@ -1120,18 +1130,14 @@ void test_course_requires_at_least_one_teaching_class() {
     CHECK_MESSAGE(cascade, "removed together with 1 teaching class");
     CHECK(fixture.context.find_teaching_class(21, stored) == false);
 
-    // 4. 没有任何教学班的课程（当前只能由 create_course 单独创建）同样可以删除，
-    //    这也是待讨论的"原子创建"的另一面。
-    CHECK_CODE(administration.create_course(
-                   fixture.admin, {4, "PH101", "Physics", 3}),
-               ResultCode::Success);
+    // 4. 没有教学班的课程属于损坏数据：公开业务入口已经无法创建（见
+    //    create_course_with_teaching_class），这里用底层构造模拟历史数据。
+    fixture.context.apply_course_change({4, "PH101", "Physics", 3});
     CHECK_CODE(administration.remove_course(fixture.admin, 4),
                ResultCode::Success);
 
     // 5. 一致性检查会报告"没有教学班"的课程。
-    CHECK_CODE(administration.create_course(
-                   fixture.admin, {5, "PH102", "Physics II", 3}),
-               ResultCode::Success);
+    fixture.context.apply_course_change({5, "PH102", "Physics II", 3});
     std::vector<std::string> problems;
     CHECK_CODE(administration.check_data_integrity(fixture.admin, problems),
                ResultCode::InvalidInput);
@@ -1345,6 +1351,178 @@ void test_data_integrity_reports_duplicate_accounts() {
     CHECK(reported);
 }
 
+// 一致性检查：Dropped 记录指向不存在的教学班必须报错；
+// 正常的 Dropped 记录（教学班还在）不算问题。
+void test_data_integrity_reports_dangling_dropped_enrollment() {
+    Fixture fixture;
+    AdministratorService administration(fixture.context);
+
+    // 正常退课：记录保留，教学班还在，检查应当是干净的。
+    CHECK_CODE(fixture.context.registration().enroll(1001, 10),
+               ResultCode::Success);
+    CHECK_CODE(fixture.context.registration().drop(1001, 10),
+               ResultCode::Success);
+    std::vector<std::string> problems;
+    CHECK_CODE(administration.check_data_integrity(fixture.admin, problems),
+               ResultCode::Success);
+    CHECK(problems.empty());
+
+    // 模拟恢复的数据里缺少教学班 10：只剩一条 Dropped 记录指向它。
+    fixture.context.remove_teaching_class_record(10);
+    const OperationResult result =
+        administration.check_data_integrity(fixture.admin, problems);
+    CHECK_CODE(result, ResultCode::InvalidInput);
+
+    bool reported = false;
+    for (const std::string& problem : problems) {
+        if (problem.find("dropped enrollment of student 1001 refers to missing "
+                         "teaching_class_id 10") != std::string::npos) {
+            reported = true;
+        }
+    }
+    CHECK(reported);
+
+    // 检查本身不改数据：记录还在，仍然可以被读取。
+    CHECK(fixture.context.all_enrollments().size() == 1);
+}
+
+// 修改课程学分时的学分累计必须用宽整数：极大值相加不能溢出绕过上限。
+void test_course_credit_change_cannot_overflow() {
+    Fixture fixture;
+    AdministratorService administration(fixture.context);
+
+    // 学生在课程 1（3 学分）与课程 2（4 学分）各有一个教学班。
+    CHECK_CODE(fixture.context.registration().enroll(1001, 11),
+               ResultCode::Success);
+    CHECK_CODE(fixture.context.registration().enroll(1001, 20),
+               ResultCode::Success);
+
+    Course course_one{};
+    Course course_two{};
+    CHECK(fixture.context.find_course(1, course_one));
+    CHECK(fixture.context.find_course(2, course_two));
+    CHECK(fixture.context.rule().maximum_credits == 18);
+
+    // 1. 极大值相加：int 累加会溢出成负数，从而绕过上限。
+    Course huge = course_two;
+    huge.credits = INT_MAX;
+    const OperationResult overflow =
+        administration.update_course(fixture.admin, huge);
+    CHECK_CODE(overflow, ResultCode::CreditLimitExceeded);
+    CHECK_MESSAGE(overflow, "above the limit");
+    Course stored{};
+    CHECK(fixture.context.find_course(2, stored));
+    CHECK(stored.credits == 4);  // 原学分不变
+    CHECK(fixture.context.enrollment_count(20) == 1);  // 选课记录不变
+
+    // 2. 恰好等于上限：3 + 14 + 4 = 21？不，14 + 4 = 18，正好等于上限，允许。
+    Course exact = course_one;
+    exact.credits = 14;
+    CHECK_CODE(administration.update_course(fixture.admin, exact),
+               ResultCode::Success);
+    CHECK(fixture.context.find_course(1, stored));
+    CHECK(stored.credits == 14);
+
+    // 改回 3 学分，便于后面的场景
+    CHECK_CODE(administration.update_course(fixture.admin, course_one),
+               ResultCode::Success);
+
+    // 3. 单门课程修改后超限：3 → 16，16 + 4 = 20 > 18。
+    Course too_high = course_one;
+    too_high.credits = 16;
+    const OperationResult over =
+        administration.update_course(fixture.admin, too_high);
+    CHECK_CODE(over, ResultCode::CreditLimitExceeded);
+    CHECK_MESSAGE(over, "S2023001");
+    CHECK(fixture.context.find_course(1, stored));
+    CHECK(stored.credits == 3);
+}
+
+// 课程与首个教学班必须一起校验、一起写入：任一项失败都不留下部分数据。
+void test_course_and_first_class_are_created_together() {
+    Fixture fixture;
+    AdministratorService administration(fixture.context);
+    const std::size_t courses_before = fixture.context.courses().size();
+    const std::size_t classes_before = fixture.context.teaching_classes().size();
+
+    // 停用一个教师，用于验证"首班教师停用"分支。
+    CHECK_CODE(administration.create_teacher(
+                   fixture.admin, {405, "T2020005", "Dr. Retired", "Physics", false}),
+               ResultCode::Success);
+
+    // ---- 课程非法：任何一条都同时挡住教学班 ----
+    const Course bad_codes[] = {
+        {4, "  ", "Physics", 3},   // 空代码
+        {4, "PH101", "  ", 3},     // 空名称
+        {4, "PH101", "Physics", 0},// 非正学分
+        {0, "PH101", "Physics", 3},// 非正编号
+        {1, "PH101", "Physics", 3},// 课程编号已存在
+        {4, "SE101", "Physics", 3},// 课程代码已存在
+    };
+    for (const Course& bad : bad_codes) {
+        const ResultCode expected =
+            (bad.course_id == 1 || bad.course_code == "SE101")
+                ? ResultCode::DuplicateIdentifier
+                : ResultCode::InvalidInput;
+        const OperationResult result = administration.create_course_with_teaching_class(
+            fixture.admin, bad, make_class(40, bad.course_id, 100, 2, 4, 600, 660, "A201"));
+        CHECK_CODE(result, expected);
+    }
+
+    // ---- 首班非法：课程本身合法，但教学班有问题 ----
+    const Course good{4, "PH101", "Physics", 3};
+    const TeachingClass bad_classes[] = {
+        make_class(40, 1, 100, 2, 4, 600, 660, "A201"),   // 课程引用不匹配
+        make_class(40, 4, 100, 0, 4, 600, 660, "A201"),   // 容量为 0
+        TeachingClass{40, 4, 100, 2, {}},                 // 没有上课时间
+        make_class(40, 4, 999, 2, 4, 600, 660, "A201"),   // 教师不存在
+        make_class(40, 4, 405, 2, 4, 600, 660, "A201"),   // 教师已停用
+        make_class(40, 4, 100, 2, 1, 540, 600, "A201"),   // 教师排课冲突
+        make_class(10, 4, 100, 2, 4, 600, 660, "A201"),   // 教学班编号已存在
+    };
+    for (const TeachingClass& bad : bad_classes) {
+        const OperationResult result =
+            administration.create_course_with_teaching_class(fixture.admin, good, bad);
+        CHECK(result.code != ResultCode::Success);
+    }
+
+    // 以上失败都没有留下课程或教学班。
+    CHECK(fixture.context.courses().size() == courses_before);
+    CHECK(fixture.context.teaching_classes().size() == classes_before);
+
+    // ---- 全部合法：两者一起写入且互相关联 ----
+    const OperationResult created = administration.create_course_with_teaching_class(
+        fixture.admin, good, make_class(40, 4, 100, 2, 4, 600, 660, "A201"));
+    CHECK_CODE(created, ResultCode::Success);
+    CHECK_MESSAGE(created, "created with teaching class 40");
+    CHECK(fixture.context.courses().size() == courses_before + 1);
+    CHECK(fixture.context.teaching_classes().size() == classes_before + 1);
+
+    Course stored_course{};
+    TeachingClass stored_class{};
+    CHECK(fixture.context.find_course(4, stored_course));
+    CHECK(stored_course.course_code == "PH101");
+    CHECK(stored_course.credits == 3);
+    CHECK(fixture.context.find_teaching_class(40, stored_class));
+    CHECK(stored_class.course_id == 4);
+    CHECK(stored_class.teacher_id == 100);
+    CHECK(stored_class.capacity == 2);
+
+    // 新课程与新班级不会让一致性检查报错。
+    std::vector<std::string> problems;
+    CHECK_CODE(administration.check_data_integrity(fixture.admin, problems),
+               ResultCode::Success);
+    CHECK(problems.empty());
+
+    // 非管理员不能调用这个入口。
+    CHECK_CODE(administration.create_course_with_teaching_class(
+                   fixture.dr_wang, {5, "PH102", "Physics II", 3},
+                   make_class(41, 5, 100, 2, 5, 600, 660, "A202")),
+               ResultCode::PermissionDenied);
+    Course missing_course{};
+    CHECK(fixture.context.find_course(5, missing_course) == false);
+}
+
 // ---------------------------------------------------------------------------
 // 一致性检查
 // ---------------------------------------------------------------------------
@@ -1456,6 +1634,7 @@ int main() {
     test_uc09_cross_teacher_access_is_denied();
     test_uc09_roster_follows_active_enrollments();
     test_uc13_course_validation();
+    test_course_credit_change_cannot_overflow();
     test_uc13_teaching_class_validation();
     test_uc13_removal_respects_relationships();
     test_uc13_time_change_must_not_break_existing_timetables();
@@ -1473,11 +1652,13 @@ int main() {
     test_uc16_student_records();
     test_uc16_teacher_records();
     test_course_requires_at_least_one_teaching_class();
+    test_course_and_first_class_are_created_together();
     test_inactive_teacher_cannot_be_assigned();
     test_inactive_teacher_class_can_still_be_edited();
     test_overlapping_meetings_in_one_class_are_allowed();
     test_account_number_is_unique_across_roles();
     test_data_integrity_reports_duplicate_accounts();
+    test_data_integrity_reports_dangling_dropped_enrollment();
     test_data_integrity_check();
     test_weekly_joint_scenario();
 

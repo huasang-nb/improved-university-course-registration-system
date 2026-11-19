@@ -1,32 +1,16 @@
-Team 4 选课系统 —— 构建与测试证据（Zhu Ziliang 分支）
-生成方式：在仓库根目录执行 .\build_and_test.ps1，以下为该脚本的原始输出
-覆盖：选课规则测试、教师/管理员测试、学生查询与课表测试，以及三个演示程序
+第 1 周构建与测试证据（历史记录，已过时）
+==========================================
 
-=== build course_registration_business_rules_tests ===
-OK: C:\Users\MSI_NB\Desktop\deepseek_harness_工作文件夹\improved-university-course-registration-system\build\course_registration_business_rules_tests.exe
+本文件记录第 1 周（2026-11-06 前后）的 g++ 构建输出，当时只有三套测试、
+教师/管理员 434 项断言。此后加入了持久化模块（要求 GCC 9+ 或 MSVC），
+本机 GCC 8.1 已无法编译全部目标，本文件不再更新。
 
-=== build teacher_and_administration_services_tests ===
-OK: C:\Users\MSI_NB\Desktop\deepseek_harness_工作文件夹\improved-university-course-registration-system\build\teacher_and_administration_services_tests.exe
+当前（2026-11-19）的测试证据请看：
+  documentation/admin_test_evidence_2026-11-19.txt
 
-=== build course_registration_console_demonstration ===
-OK: C:\Users\MSI_NB\Desktop\deepseek_harness_工作文件夹\improved-university-course-registration-system\build\course_registration_console_demonstration.exe
-
-=== build teacher_and_administration_demonstration ===
-OK: C:\Users\MSI_NB\Desktop\deepseek_harness_工作文件夹\improved-university-course-registration-system\build\teacher_and_administration_demonstration.exe
-
-=== build student_query_and_timetable_tests ===
-OK: C:\Users\MSI_NB\Desktop\deepseek_harness_工作文件夹\improved-university-course-registration-system\build\student_query_and_timetable_tests.exe
-
-=== build student_query_demonstration ===
-OK: C:\Users\MSI_NB\Desktop\deepseek_harness_工作文件夹\improved-university-course-registration-system\build\student_query_demonstration.exe
-
-=== run course_registration_business_rules_tests ===
-All registration tests passed
-
-=== run teacher_and_administration_services_tests ===
-PASS: 383 checks, 0 failure(s)
-
-=== run student_query_and_timetable_tests ===
-All student query and timetable tests passed
-
-ALL BUILD AND TESTS PASSED
+当前结果摘要（MSVC 2022，cl /utf-8 /std:c++17）：
+  course_registration_business_rules_tests   All registration tests passed
+  teacher_and_administration_services_tests  PASS: 483 checks, 0 failure(s)
+  student_query_and_timetable_tests          All student query and timetable tests passed
+  persistence_tests                          All persistence tests passed
+  persistent_administration_tests            PASS: 89 checks, 0 failure(s)

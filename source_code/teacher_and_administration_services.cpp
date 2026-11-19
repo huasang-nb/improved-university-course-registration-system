@@ -113,11 +113,6 @@ const char* role_name(Role role) {
     return "unknown";
 }
 
-// 账号比较口径（与登录匹配、恢复校验必须一致）：
-// 去掉首尾空白 + 转小写后按整串比较，不做其它归一化。
-std::string account_key(const std::string& text) {
-    return normalize_account_key(text);
-}
 
 std::string describe(const ClassMeeting& meeting) {
     return "day " + std::to_string(meeting.day_of_week) + " " +
@@ -314,6 +309,7 @@ const Student* SystemContext::find_student_by_number(
     for (const Student& student : students_) {
         if (normalize_account_key(student.student_number) ==
             normalize_account_key(number)) {
+
             return &student;
         }
     }
@@ -325,6 +321,7 @@ const Teacher* SystemContext::find_teacher_by_number(
     for (const Teacher& teacher : teachers_) {
         if (normalize_account_key(teacher.teacher_number) ==
             normalize_account_key(number)) {
+
             return &teacher;
         }
     }
@@ -335,12 +332,12 @@ bool SystemContext::find_account_owner(const std::string& number,
                                       Role exclude_role, int exclude_id,
                                       Role& owner,
                                       std::string& owner_number) const {
-    const std::string target = account_key(number);
+    const std::string target = normalize_account_key(number);
     for (const Student& student : students_) {
         if (exclude_role == Role::Student && student.student_id == exclude_id) {
             continue;
         }
-        if (account_key(student.student_number) == target) {
+        if (normalize_account_key(student.student_number) == target) {
             owner = Role::Student;
             owner_number = student.student_number;
             return true;
@@ -350,7 +347,7 @@ bool SystemContext::find_account_owner(const std::string& number,
         if (exclude_role == Role::Teacher && teacher.teacher_id == exclude_id) {
             continue;
         }
-        if (account_key(teacher.teacher_number) == target) {
+        if (normalize_account_key(teacher.teacher_number) == target) {
             owner = Role::Teacher;
             owner_number = teacher.teacher_number;
             return true;
@@ -361,7 +358,7 @@ bool SystemContext::find_account_owner(const std::string& number,
             administrator.administrator_id == exclude_id) {
             continue;
         }
-        if (account_key(administrator.account_number) == target) {
+        if (normalize_account_key(administrator.account_number) == target) {
             owner = Role::Administrator;
             owner_number = administrator.account_number;
             return true;
@@ -679,11 +676,18 @@ OperationResult TeacherService::class_roster(
 AdministratorService::AdministratorService(SystemContext& context)
     : context_(context) {}
 
-OperationResult AdministratorService::create_course(const UserIdentity& user,
-                                                    const Course& course) {
+// URS 6.7 要求每门课程至少有一个教学班，因此课程与首个教学班必须一起校验、
+// 一起写入：任一项不通过，两者都不落库，不会留下"零教学班课程"。
+// 旧的单独 create_course() 已从这里移除，正常业务无法再创建无班课程；
+// 恢复/导入历史数据请直接构造 SystemContext（见 persistence_service）。
+OperationResult AdministratorService::create_course_with_teaching_class(
+    const UserIdentity& user, const Course& course,
+    const TeachingClass& first_teaching_class) {
     if (!PermissionRules::can_manage_catalog(user)) {
         return denied("creating a course");
     }
+
+    // ---- 课程字段 ----
     if (course.course_id <= 0) {
         return {ResultCode::InvalidInput, "course_id must be positive"};
     }
@@ -696,7 +700,6 @@ OperationResult AdministratorService::create_course(const UserIdentity& user,
     if (course.credits <= 0) {
         return {ResultCode::InvalidInput, "credits must be positive"};
     }
-
     for (const Course& existing : context_.courses()) {
         if (existing.course_id == course.course_id) {
             return {ResultCode::DuplicateIdentifier,
@@ -709,9 +712,69 @@ OperationResult AdministratorService::create_course(const UserIdentity& user,
         }
     }
 
+    // ---- 首个教学班字段 ----
+    if (first_teaching_class.course_id != course.course_id) {
+        return {ResultCode::InvalidInput,
+                "teaching class " +
+                    std::to_string(first_teaching_class.teaching_class_id) +
+                    " points at course_id " +
+                    std::to_string(first_teaching_class.course_id) +
+                    ", not " + std::to_string(course.course_id)};
+    }
+    if (first_teaching_class.teaching_class_id <= 0) {
+        return {ResultCode::InvalidInput, "teaching_class_id must be positive"};
+    }
+    for (const TeachingClass& existing : context_.teaching_classes()) {
+        if (existing.teaching_class_id ==
+            first_teaching_class.teaching_class_id) {
+            return {ResultCode::DuplicateIdentifier,
+                    "teaching_class_id " +
+                        std::to_string(first_teaching_class.teaching_class_id) +
+                        " already exists"};
+        }
+    }
+    if (first_teaching_class.capacity <= 0) {
+        return {ResultCode::InvalidInput, "capacity must be at least 1"};
+    }
+    if (first_teaching_class.meetings.empty()) {
+        return {ResultCode::InvalidInput,
+                "a teaching class needs at least one class meeting"};
+    }
+    for (const ClassMeeting& meeting : first_teaching_class.meetings) {
+        if (!is_valid_meeting(meeting)) {
+            return {ResultCode::InvalidInput,
+                    "invalid class meeting: " + describe(meeting)};
+        }
+    }
+    const Teacher* teacher =
+        context_.find_teacher(first_teaching_class.teacher_id);
+    if (teacher == nullptr) {
+        return {ResultCode::RecordNotFound,
+                "teacher_id " + std::to_string(first_teaching_class.teacher_id) +
+                    " not found"};
+    }
+    if (!teacher->account_active) {
+        return {ResultCode::InvalidInput,
+                "teacher " + teacher->teacher_number +
+                    " is not an active account"};
+    }
+    for (const TeachingClass& other : context_.teaching_classes()) {
+        if (other.teacher_id == first_teaching_class.teacher_id &&
+            teaching_classes_overlap(other, first_teaching_class)) {
+            return {ResultCode::TimeConflict,
+                    "teacher " + teacher->teacher_number +
+                        " already teaches teaching class " +
+                        std::to_string(other.teaching_class_id) +
+                        " in the same time slot"};
+        }
+    }
+
+    // ---- 全部通过后才写入 ----
     context_.apply_course_change(course);
+    context_.apply_teaching_class_change(first_teaching_class);
     return {ResultCode::Success,
-            "course " + course.course_code + " created"};
+            "course " + course.course_code + " created with teaching class " +
+                std::to_string(first_teaching_class.teaching_class_id)};
 }
 
 OperationResult AdministratorService::update_course(const UserIdentity& user,
@@ -743,10 +806,11 @@ OperationResult AdministratorService::update_course(const UserIdentity& user,
     }
 
     // 改学分不能让任何在读学生超过学分上限，否则拒绝并指出学生。
+    // 累计用 long long：单门学分是 int，多门相加可能溢出 int 而上限判断失效。
     if (course.credits != existing.credits) {
         const RegistrationRule rule = context_.rule();
         for (const Student& student : context_.students()) {
-            int total = 0;
+            long long total = 0;
             for (const Enrollment& enrollment :
                  context_.active_enrollments(student.student_id)) {
                 TeachingClass enrolled_class{};
@@ -763,7 +827,7 @@ OperationResult AdministratorService::update_course(const UserIdentity& user,
                              ? course.credits
                              : enrolled_course.credits;
             }
-            if (total > rule.maximum_credits) {
+            if (total > static_cast<long long>(rule.maximum_credits)) {
                 return {ResultCode::CreditLimitExceeded,
                         "changing credits to " + std::to_string(course.credits) +
                             " makes student " + student.student_number +
@@ -1534,6 +1598,17 @@ OperationResult AdministratorService::check_data_integrity(
                     " in teaching class " +
                     std::to_string(enrollments[left].teaching_class_id));
             }
+            // 教学班被删掉（或恢复的数据里不含它）时，退课记录会变成悬空历史，
+            // 同样要报出来；正常的 Dropped 记录（班还在）不报错。
+            TeachingClass dropped_class{};
+            if (!context_.find_teaching_class(enrollments[left].teaching_class_id,
+                                              dropped_class)) {
+                problems.push_back(
+                    "dropped enrollment of student " +
+                    std::to_string(enrollments[left].student_id) +
+                    " refers to missing teaching_class_id " +
+                    std::to_string(enrollments[left].teaching_class_id));
+            }
             continue;
         }
         TeachingClass enrolled_class{};
@@ -1603,15 +1678,15 @@ OperationResult AdministratorService::check_data_integrity(
     // 已有的重复数据（历史导入、早期版本写入）在这里一次性报出。
     std::vector<std::pair<std::string, std::string>> accounts;
     for (const Student& student : context_.students()) {
-        accounts.push_back({account_key(student.student_number),
+        accounts.push_back({normalize_account_key(student.student_number),
                             "student " + student.student_number});
     }
     for (const Teacher& teacher : context_.teachers()) {
-        accounts.push_back({account_key(teacher.teacher_number),
+        accounts.push_back({normalize_account_key(teacher.teacher_number),
                             "teacher " + teacher.teacher_number});
     }
     for (const Administrator& administrator : context_.administrators()) {
-        accounts.push_back({account_key(administrator.account_number),
+        accounts.push_back({normalize_account_key(administrator.account_number),
                             "administrator " + administrator.account_number});
     }
     for (std::size_t left = 0; left < accounts.size(); ++left) {

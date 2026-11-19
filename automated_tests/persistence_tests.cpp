@@ -9,6 +9,7 @@
 // 关键检查统一用 CHECK 宏（不依赖 assert），发布构建也不会被跳过。
 
 #include "persistence_service.hpp"
+#include "student_query_and_timetable_services.hpp"
 
 #include <filesystem>
 #include <fstream>
@@ -941,6 +942,64 @@ int main() {
         CHECK(load_state(options_at(overflow_load), keep).code ==
               ResultCode::StorageIntegrityError);
         EXPECT_SAME_STATE(keep, snapshot);
+    }
+
+    // ==================================================================
+    // 21. 第 2 周任务：课表 + 时间冲突 + 基础数据保存（持久化后仍一致）。
+    // ==================================================================
+    {
+        SystemContext source = make_seed_context();
+        CHECK(source.registration().enroll(1001, 10).code ==
+              ResultCode::Success);  // 周一 540-600
+        CHECK(source.registration().enroll(1001, 30).code ==
+              ResultCode::Success);  // 周三 840-900
+        // 与周一 570-630 的班 20 冲突 → 拒绝
+        CHECK(source.registration().enroll(1001, 20).code ==
+              ResultCode::TimeConflict);
+
+        const std::string path = dir + "/week2.json";
+        CHECK(save_state(source, options_at(path)).code == ResultCode::Success);
+
+        SystemContext loaded = make_seed_context();
+        CHECK(load_state(options_at(path), loaded).code == ResultCode::Success);
+        EXPECT_SAME_STATE(source, loaded);
+
+        // 课表在持久化前后一致
+        const UserIdentity student{1001, "S2023001", Role::Student};
+        StudentQueryService source_query(source);
+        StudentQueryService loaded_query(loaded);
+        std::vector<TimetableEntry> before;
+        std::vector<TimetableEntry> after;
+        CHECK(source_query.view_timetable(student, before).code ==
+              ResultCode::Success);
+        CHECK(loaded_query.view_timetable(student, after).code ==
+              ResultCode::Success);
+        CHECK(before.size() == 2);
+        CHECK(after.size() == before.size());
+        for (size_t i = 0; i < before.size() && i < after.size(); ++i) {
+            CHECK(before[i].teaching_class_id == after[i].teaching_class_id);
+            CHECK(before[i].course_code == after[i].course_code);
+            CHECK(before[i].meeting.day_of_week ==
+                  after[i].meeting.day_of_week);
+            CHECK(before[i].meeting.start_minute ==
+                  after[i].meeting.start_minute);
+            CHECK(before[i].meeting.end_minute ==
+                  after[i].meeting.end_minute);
+            CHECK(before[i].meeting.room == after[i].meeting.room);
+        }
+
+        // 重启后时间冲突仍被拒绝
+        CHECK(loaded.registration().enroll(1001, 20).code ==
+              ResultCode::TimeConflict);
+
+        // 重启后退课，课表同步减少
+        CHECK(loaded.registration().drop(1001, 30).code ==
+              ResultCode::Success);
+        std::vector<TimetableEntry> after_drop;
+        CHECK(loaded_query.view_timetable(student, after_drop).code ==
+              ResultCode::Success);
+        CHECK(after_drop.size() == 1);
+        CHECK(after_drop[0].teaching_class_id == 10);
     }
 
     if (g_failures != 0) {
