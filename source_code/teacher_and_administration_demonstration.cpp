@@ -120,18 +120,20 @@ int main() {
               << roster.remaining_seats << '\n';
 
     section("UC13 Manage Courses and Teaching Classes");
-    show("Admin creates course PH101",
-         administration.create_course(admin, {4, "PH101", "Physics", 3}));
-    show("Admin creates duplicated course code PH101",
-         administration.create_course(admin, {5, "PH101", "Physics II", 3}));
-    show("Admin creates teaching class 40 of PH101",
-         administration.create_teaching_class(
-             admin, make_class(40, 4, 100, 2, 4, 600, 660, "A201")));
-    show("Admin removes course PH101 while class 40 still exists",
+    show("Admin creates PH101 together with its first class",
+         administration.create_course_with_teaching_class(
+             admin, {4, "PH101", "Physics", 3},
+             make_class(40, 4, 100, 2, 4, 600, 660, "A201")));
+    show("Admin repeats the same course code",
+         administration.create_course_with_teaching_class(
+             admin, {5, "PH101", "Physics II", 3},
+             make_class(41, 5, 100, 2, 4, 700, 760, "A202")));
+    show("Admin sends a first class of another course",
+         administration.create_course_with_teaching_class(
+             admin, {6, "PH102", "Physics II", 3},
+             make_class(42, 1, 100, 2, 4, 700, 760, "A202")));
+    show("Admin removes PH101 together with its class",
          administration.remove_course(admin, 4));
-    show("Admin removes teaching class 40",
-         administration.remove_teaching_class(admin, 40));
-    show("Admin removes course PH101", administration.remove_course(admin, 4));
 
     section("UC15 Set Registration Period");
     context.set_now_for_tests("2026-11-03T10:00");

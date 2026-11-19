@@ -147,6 +147,14 @@ public:
     const Student* find_student_by_number(const std::string& number) const;
     const Teacher* find_teacher_by_number(const std::string& number) const;
 
+    // 跨角色账号查重：登录账号（学号 / 工号 / 管理员账号）在三种角色之间必须唯一。
+    // 命中时返回 true，并给出占用者的角色与账号；大小写不敏感。
+    // exclude_role + exclude_id 用于"修改自己"时排除自身记录；
+    // id 为正数才可能命中，传 0 相当于不排除。
+    bool find_account_owner(const std::string& number, Role exclude_role,
+                            int exclude_id, Role& owner,
+                            std::string& owner_number) const;
+
     // 以 bool + 输出参数代替返回指针，因为目录是快照。
     bool find_course(int course_id, Course& course) const;
     bool find_teaching_class(int teaching_class_id,
@@ -189,6 +197,12 @@ public:
     // 缺陷-010：记录并返回"本轮是否已经开放过"（含已暂停、已结束）。
     // 一旦为 true 就保持 true，用于锁住学分上限，避免"先关闭、改上限、再开放"绕过限制。
     bool observe_registration_round();
+
+    // ---- [Zhang Yikai 追加，待 Zhang Yuhua 复核] 持久化需要读取/恢复这个历史事实 ----
+    // round_opened() 只读，不触发"观察当前时间"的副作用；
+    // restore_round_opened() 只在持久化载入时调用，把文件里的事实写回。
+    bool round_opened() const;
+    void restore_round_opened(bool opened);
 
 private:
     std::vector<Student> students_;
@@ -237,7 +251,13 @@ public:
     explicit AdministratorService(SystemContext& context);
 
     // UC13 Manage Courses and Teaching Classes
-    OperationResult create_course(const UserIdentity& user, const Course& course);
+    //
+    // 创建课程必须同时给出首个教学班：URS 6.7 要求每门课程至少有一个教学班，
+    // 任一检查失败则课程与教学班都不写入（不留下零教学班课程）。
+    // 单独的 create_course() 已移除；恢复/导入历史数据请直接构造 SystemContext。
+    OperationResult create_course_with_teaching_class(
+        const UserIdentity& user, const Course& course,
+        const TeachingClass& first_teaching_class);
     OperationResult update_course(const UserIdentity& user, const Course& course);
     OperationResult remove_course(const UserIdentity& user, int course_id);
     OperationResult create_teaching_class(const UserIdentity& user,

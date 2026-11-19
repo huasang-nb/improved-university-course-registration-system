@@ -1,9 +1,33 @@
 #pragma once
 
+#include <cctype>
 #include <string>
 #include <vector>
 
 namespace course_registration {
+
+// 账号比较的统一规则：去掉首尾空白，再转小写。
+// 维护入口、持久化保存/恢复校验与后续登录匹配都应使用它，避免
+// "带空格的账号" 在不同入口被当成不同账号。
+inline std::string normalize_account_key(const std::string& text) {
+    size_t begin = 0;
+    size_t end = text.size();
+    while (begin < end &&
+           std::isspace(static_cast<unsigned char>(text[begin]))) {
+        ++begin;
+    }
+    while (end > begin &&
+           std::isspace(static_cast<unsigned char>(text[end - 1]))) {
+        --end;
+    }
+    std::string result;
+    result.reserve(end - begin);
+    for (size_t i = begin; i < end; ++i) {
+        result.push_back(static_cast<char>(
+            std::tolower(static_cast<unsigned char>(text[i]))));
+    }
+    return result;
+}
 
 // 一次上课的时间。分钟从当天 00:00 起计算，例如 09:00 是 540。
 struct ClassMeeting {
@@ -66,7 +90,14 @@ enum class ResultCode {
     RecordNotFound,         // 课程、教师、学生等记录不存在
     DuplicateIdentifier,    // 编号或学号/工号重复
     CapacityBelowEnrollment,// 新容量小于当前有效选课人数
-    CatalogInUse            // 记录仍被引用（课程仍有教学班、教学班仍有有效选课）
+    CatalogInUse,           // 记录仍被引用（课程仍有教学班、教学班仍有有效选课）
+    // [Zhang Yikai 追加，待 Zhang Yuhua 复核] 持久化层需要的失败原因。
+    // 追加在末尾，上面已有编号的含义不变，现有调用方无需改动。
+    StorageIoError,         // 读写文件失败（不可写、磁盘满、目录不存在等）
+    StorageParseError,      // 文件内容不是合法的 state 格式
+    StorageSchemaMismatch,  // schema_version 不认识
+    StorageIntegrityError,  // 引用缺失、编号重复等数据一致性问题
+    StorageBackupMissing    // 没有可恢复的 .bak 备份
 };
 
 struct OperationResult {
@@ -113,6 +144,12 @@ public:
     void apply_catalog_change(const std::vector<Course>& courses,
                               const std::vector<TeachingClass>& teaching_classes);
     void apply_rule_change(const RegistrationRule& rule);
+
+    // ---- [Zhang Yikai 追加，待 Zhang Yuhua 复核] 持久化恢复入口 ----
+    // 载入时直接恢复原始选课记录，不再走 enroll() 的业务检查：
+    // 这些记录在保存前已经校验过，重放会因时段/容量变化而失败。
+    // 只允许持久化层在 load/restore 时调用。
+    void restore_enrollments(std::vector<Enrollment> enrollments);
 
 private:
     const Course* find_course(int course_id) const;

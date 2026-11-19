@@ -111,12 +111,30 @@ remaining_seats   = TeachingClass.capacity - active_count(tc)
 
 | 接口 | 失败原因 |
 |---|---|
-| `create_course` / `update_course` / `remove_course` | `PermissionDenied`、`InvalidInput`、`DuplicateIdentifier`、`RecordNotFound`、`CatalogInUse`（仍有教学班）、`CreditLimitExceeded`（改学分使学生超限） |
-| `create_teaching_class` / `update_teaching_class` / `remove_teaching_class` | `PermissionDenied`、`InvalidInput`（非法时段/容量≤0）、`DuplicateIdentifier`、`RecordNotFound`（课程或教师不存在）、`TimeConflict`（教师或已选学生冲突）、`CatalogInUse`（仍有选课记录）、`CapacityBelowEnrollment` |
+| `create_course_with_teaching_class(user, course, first_class)` | `PermissionDenied`、`InvalidInput`、`DuplicateIdentifier`、`RecordNotFound`（教师不存在）、`TimeConflict`（教师排课冲突）。任一失败课程与教学班都不写入；**单独的 `create_course` 已移除** |
+| `update_course` / `remove_course` | `PermissionDenied`、`InvalidInput`、`DuplicateIdentifier`、`RecordNotFound`、`CatalogInUse`（有选退课记录时不能删课程）、`CreditLimitExceeded`（改学分使学生超限，按 `long long` 累计） |
+| `create_teaching_class` / `update_teaching_class` / `remove_teaching_class` | `PermissionDenied`、`InvalidInput`（非法时段/容量≤0/改派给停用教师）、`DuplicateIdentifier`、`RecordNotFound`（课程或教师不存在）、`TimeConflict`（教师或已选学生冲突）、`CatalogInUse`（仍有选课记录，或会删掉/移走课程最后一个教学班）、`CapacityBelowEnrollment` |
 | `set_teaching_class_capacity` | `PermissionDenied`、`InvalidInput`、`TeachingClassNotFound`、`CapacityBelowEnrollment` |
-| `set_registration_period` / `set_maximum_credits` / `close_registration` | `PermissionDenied`、`InvalidInput`（格式错误或起止颠倒） |
-| `create_student` / `update_student` / `remove_student`、`create_teacher` / `update_teacher` / `remove_teacher` | `PermissionDenied`、`InvalidInput`（空字段）、`DuplicateIdentifier`（编号或学号/工号重复）、`RecordNotFound`、`CatalogInUse`（仍有有效选课/仍负责教学班） |
+| `set_registration_period` / `set_maximum_credits` / `close_registration` | `PermissionDenied`、`InvalidInput`（格式错误或起止颠倒；本轮已开放过仍试图改学分上限） |
+| `create_student` / `update_student` / `remove_student`、`create_teacher` / `update_teacher` / `remove_teacher` | `PermissionDenied`、`InvalidInput`（空字段）、`DuplicateIdentifier`（编号或学号/工号重复，含跨角色重名）、`RecordNotFound`、`CatalogInUse`（学生有任何选退课记录 / 教师仍负责教学班） |
 | `check_data_integrity(identity, problems)` | `PermissionDenied`；发现不一致时返回 `InvalidInput` 并逐条列出问题 |
+
+**页面与后续接口应调用持久化入口** `PersistentAdministratorService`（同一组方法名），
+它在临时副本上执行业务校验、保存成功后才发布；失败时正式状态与文件都不变。
+用法、失败语义与实测环境见 `documentation/admin_persistence_integration.md`。
+
+### 3.7.1 管理员维护必须遵守的业务规则（2026-11-07 确认）
+
+| 规则 | 现状 |
+|---|---|
+| 每门 Course 至少保留一个 TeachingClass（URS 6.7） | 创建课程必须调用 `create_course_with_teaching_class(user, course, first_class)`，任一校验失败两者都不写入；单独的 `create_course()` 已移除。删除或移走课程最后一个教学班返回 `CatalogInUse`；`check_data_integrity` 会报告零教学班课程 |
+| 删除课程（2026-11-17 确认） | 没有任何选退课记录时，一次删除课程**及其全部教学班**，消息写明删了几个班；存在 `Active` 或 `Dropped` 记录时返回 `CatalogInUse`，消息给出条数并说明"退课不会让课程变成可删除" |
+| 改派教师时检查账号状态 | 停用教师（`account_active = false`）不能新建班、不能被**改派**；失败后原任课教师保留。原班教师被停用后能否改该班时间/容量仍**待确认**，当前不扩大限制（允许） |
+| 有选退课记录的学生禁止删除 | 有任何 `Enrollment` 记录（含全部为 `Dropped`）都返回 `CatalogInUse`；需要限制使用时改为停用账号 |
+| 同一教学班内部允许时段重叠 | 已确认行为，不做"班级内部自冲突"校验；跨教学班的学生时间冲突与教师排课冲突仍然生效 |
+| 学分上限的修改时机 | 本轮开放过（含暂停、结束、预约到点自动开放）之后禁止修改 |
+| 登录账号全局唯一（2026-11-17） | 学号 / 工号 / 管理员账号在三种角色之间唯一；**比较口径：去首尾空白 + 转小写后整串相等**（与恢复校验、登录匹配必须一致）；新增与修改都检查，修改只排除被修改的那一个对象；`check_data_integrity()` 会报出历史重名 |
+| 一致性检查覆盖（2026-11-18） | `check_data_integrity()` 报告：零教学班课程、跨角色重名账号、Active 记录缺学生或教学班、**Dropped 记录缺学生或缺教学班**、容量小于有效人数、同班重复有效记录、课表冲突。正常的 Dropped 记录（教学班仍在）不算问题 |
 
 ### 3.8 结果码清单
 
@@ -144,11 +162,19 @@ remaining_seats   = TeachingClass.capacity - active_count(tc)
 ### 4.2 测试运行
 
 ```powershell
+# 方式一：脚本（g++；持久化目标要求 GCC 9+）
 .\build_and_test.ps1
+
+# 方式二：CMake（VS 2022 / GCC 9+ 均可）
+cmake -S . -B build\cmake -G "Visual Studio 17 2022" -A x64
+cmake --build build\cmake --config Release
+cd build\cmake; ctest -C Release --output-on-failure
 ```
 
-或按 README 手动编译两套测试。判定标准：两套测试均返回 0；Zhu 的测试会打印
-`PASS: <n> checks, 0 failure(s)`。每周把该输出作为飞书"测试证据"。
+判定标准：五套测试全部返回 0（选课核心、教师/管理员、学生查询、持久化、
+管理员持久化）；Zhu 的两套会打印 `PASS: <n> checks, 0 failure(s)`。
+`ctest -N` 应列出 5 个测试，其中包含 `persistent_administration`。
+每周把该输出作为飞书"测试证据"。
 
 ### 4.3 每周共同场景（必跑）
 
@@ -167,11 +193,11 @@ remaining_seats   = TeachingClass.capacity - active_count(tc)
 2. **改动方式**：
    - 只能**追加**（新字段带默认值、新结果码加在枚举末尾、新增接口），不得改变已有字段含义、
      枚举顺序或 `enroll()` 的检查顺序。破坏性改动必须三人会议确认。
-   - 追加后必须保证原有文件在 `-Wall -Wextra` 下**零警告**编译，且 Yuhua 的两套测试仍通过。
+   - 追加后必须保证原有文件在 `-Wall -Wextra` 下**零警告**编译，且另外两套测试仍通过。
 3. **通知与复核**：在个人分支提交，附 `interface_change_request.md`；在飞书 @ 维护人与复核人；
    复核轮换按团队说明 —— Yuhua 的改动由 Yikai 复核，Yikai 的由 Ziliang 复核，Ziliang 的由 Yuhua 复核。
-   复核人需从最新 `main` 拉取、从头编译、运行两套测试后才可合并。
-4. **合并前门槛**：`main` 可编译；两套测试通过；接口表已更新；截图或测试输出已贴进飞书。
+   复核人需从最新 `main` 拉取、从头编译、运行三套测试后才可合并。
+4. **合并前门槛**：`main` 可编译；三套测试通过；接口表已更新；截图或测试输出已贴进飞书。
 
 ## 六、仍需三人确认的问题
 
