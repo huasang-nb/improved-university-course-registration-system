@@ -36,7 +36,7 @@
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "registration_rule": {
     "registration_open": false, "maximum_credits": 18,
     "opens_at": "2026-11-20T09:00", "closes_at": "2026-11-27T17:00"
@@ -52,20 +52,29 @@
   ],
   "students": [
     { "student_id": 1001, "student_number": "S2023001", "name": "Alice Chen",
-      "major": "Computer Science", "account_active": true }
+      "major": "Computer Science", "account_active": true,
+      "password_hash": "$argon2id$v=19$m=65536,t=3,p=4$..." }
   ],
   "teachers": [
     { "teacher_id": 100, "teacher_number": "T2015007", "name": "Dr. Wang",
-      "department": "Software Engineering", "account_active": true }
+      "department": "Software Engineering", "account_active": true,
+      "password_hash": "" }
   ],
   "administrators": [
-    { "administrator_id": 900, "account_number": "A2020001", "name": "Admin Sun", "account_active": true }
+    { "administrator_id": 900, "account_number": "A2020001", "name": "Admin Sun",
+      "account_active": true, "password_hash": "" }
   ],
   "enrollments": [
     { "student_id": 1001, "teaching_class_id": 10, "status": "active" }
   ]
 }
 ```
+
+`password_hash` 只做**透明字符串**存储（Argon2id PHC 字符串，由登录模块生成/校验），
+空串表示**未设置密码**。持久化层不链接 libsodium。
+
+**版本兼容**：加载接受 `schema_version` 1 和 2；v1 快照没有 `password_hash`，
+缺失时按空串处理；保存统一写成 v2。
 
 **不保存**派生值（余量、人数、课表、active 列表）与 `fixed_now_`（测试专用）。
 
