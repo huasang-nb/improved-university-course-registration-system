@@ -9,6 +9,7 @@
 // 关键检查统一用 CHECK 宏（不依赖 assert），发布构建也不会被跳过。
 
 #include "persistence_service.hpp"
+#include "student_query_and_timetable_services.hpp"
 
 #include <filesystem>
 #include <fstream>
@@ -941,6 +942,63 @@ int main() {
         CHECK(load_state(options_at(overflow_load), keep).code ==
               ResultCode::StorageIntegrityError);
         EXPECT_SAME_STATE(keep, snapshot);
+    }
+
+    // ==================================================================
+    // 22. 停用教师：保存/恢复必须保留教师启停状态、教学班关联与 Active/Dropped。
+    // ==================================================================
+    {
+        std::vector<std::string> problems;
+        SystemContext state = make_seed_context();
+        Teacher teacher = state.teachers()[0];  // Dr. Wang 教 class 10
+        teacher.account_active = false;
+        state.apply_teacher_change(teacher);
+        state.registration().restore_enrollments(
+            {{1001, 10, EnrollmentStatus::Active},
+             {1002, 10, EnrollmentStatus::Dropped}});
+        CHECK(validate_state(state, problems).code == ResultCode::Success);
+
+        const std::string path = dir + "/inactive_teacher.json";
+        CHECK(save_state(state, options_at(path)).code == ResultCode::Success);
+
+        // 文件里必须仍保留停用教师、班级指向该教师、两条记录
+        const std::string text = read_text(path);
+        CHECK(text.find("\"teacher_id\": 100") != std::string::npos);
+        CHECK(text.find("\"account_active\": false") != std::string::npos);
+        CHECK(text.find("\"student_id\": 1002") != std::string::npos);
+
+        // 加载不因"历史关联停用教师"而拒绝
+        SystemContext loaded = make_seed_context();
+        CHECK(load_state(options_at(path), loaded).code == ResultCode::Success);
+        const Teacher* loaded_teacher = loaded.find_teacher(100);
+        CHECK(loaded_teacher != nullptr);
+        CHECK(loaded_teacher != nullptr &&
+              loaded_teacher->account_active == false);
+        TeachingClass loaded_class{};
+        CHECK(loaded.find_teaching_class(10, loaded_class));
+        CHECK(loaded_class.teacher_id == 100);
+        CHECK(loaded.all_enrollments().size() == 2);
+
+        // 已有选课/课表继续正常展示（不因教师停用被隐藏）
+        StudentQueryService query(loaded);
+        const UserIdentity student{1001, "S2023001", Role::Student};
+        std::vector<TimetableEntry> table;
+        CHECK(query.view_timetable(student, table).code == ResultCode::Success);
+        CHECK(table.size() == 1);
+        CHECK(table[0].teaching_class_id == 10);
+
+        // 恢复（.bak）同样成功，且保留停用状态与两条记录
+        SystemContext second = loaded;
+        CHECK(save_state(second, options_at(path)).code == ResultCode::Success);
+        write_text(path, "{ broken");
+        SystemContext restored = make_seed_context();
+        CHECK(restore_state(options_at(path), restored).code ==
+              ResultCode::Success);
+        CHECK(restored.all_enrollments().size() == 2);
+        const Teacher* restored_teacher = restored.find_teacher(100);
+        CHECK(restored_teacher != nullptr);
+        CHECK(restored_teacher != nullptr &&
+              restored_teacher->account_active == false);
     }
 
     if (g_failures != 0) {
