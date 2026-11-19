@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.16)
 project(course_registration_starter LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
+
+# 源码含中文注释：MSVC 缺省按本地代码页（936）读取会破坏字符串与代码结构。
+if (MSVC)
+    add_compile_options(/utf-8)
+endif()
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_library(course_registration_business_rules source_code/course_registration_business_rules.cpp)
@@ -93,4 +98,29 @@ endif()
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
         AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9.0)
     target_link_libraries(persistence_service PUBLIC stdc++fs)
+endif()
+
+# ---------------------------------------------------------------------------
+# [Zhu Ziliang 追加] 管理员修改的持久化入口（副本执行业务 -> 保存 -> 发布）。
+# 只新增目标，不改动上面的目标名称与依赖。
+# ---------------------------------------------------------------------------
+add_library(persistent_administration_service
+    source_code/persistent_administration_service.cpp)
+target_link_libraries(persistent_administration_service
+    PUBLIC persistence_service)
+target_include_directories(persistent_administration_service
+    PUBLIC header_files)
+
+add_executable(persistent_administration_tests
+    automated_tests/persistent_administration_tests.cpp)
+target_link_libraries(persistent_administration_tests
+    PRIVATE persistent_administration_service)
+add_test(NAME persistent_administration
+         COMMAND persistent_administration_tests)
+
+if (MSVC)
+    target_compile_options(persistent_administration_service PRIVATE /W4)
+else()
+    target_compile_options(persistent_administration_service PRIVATE -Wall -Wextra)
+    target_compile_options(persistent_administration_tests PRIVATE -Wall -Wextra)
 endif()

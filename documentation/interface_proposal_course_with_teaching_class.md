@@ -16,9 +16,10 @@
 这是"两个公开调用 + 无事务"的问题，靠网页表单必填解决不了：业务接口本身允许只写课程。
 所以需要**一个调用同时校验并保存两者**，任一失败则两者都不写。
 
-## 二、本次已经做的部分（不改接口）
+## 二、先行落地的部分（不改接口）
 
-同一分支 `feature/zhu-ziliang-admin-consistency` 已提交：
+这些保护先于聚合接口落地，现位于分支 `feature/zhu-ziliang-admin-persistence`
+（原 `feature/zhu-ziliang-admin-consistency` 已并入）：
 
 | 改动 | 位置 | 失败返回 |
 |---|---|---|

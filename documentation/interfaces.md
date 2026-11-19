@@ -127,7 +127,7 @@ remaining_seats   = TeachingClass.capacity - active_count(tc)
 
 | 规则 | 现状 |
 |---|---|
-| 每门 Course 至少保留一个 TeachingClass（URS 6.7） | 删除或移走课程最后一个教学班返回 `CatalogInUse`；`check_data_integrity` 会报告零教学班课程。**创建课程时"课程 + 首个教学班"原子保存尚未实现**，方案见 `documentation/interface_proposal_course_with_teaching_class.md`，等三人对齐后再改接口 |
+| 每门 Course 至少保留一个 TeachingClass（URS 6.7） | 创建课程必须调用 `create_course_with_teaching_class(user, course, first_class)`，任一校验失败两者都不写入；单独的 `create_course()` 已移除。删除或移走课程最后一个教学班返回 `CatalogInUse`；`check_data_integrity` 会报告零教学班课程 |
 | 删除课程（2026-11-17 确认） | 没有任何选退课记录时，一次删除课程**及其全部教学班**，消息写明删了几个班；存在 `Active` 或 `Dropped` 记录时返回 `CatalogInUse`，消息给出条数并说明"退课不会让课程变成可删除" |
 | 改派教师时检查账号状态 | 停用教师（`account_active = false`）不能新建班、不能被**改派**；失败后原任课教师保留。原班教师被停用后能否改该班时间/容量仍**待确认**，当前不扩大限制（允许） |
 | 有选退课记录的学生禁止删除 | 有任何 `Enrollment` 记录（含全部为 `Dropped`）都返回 `CatalogInUse`；需要限制使用时改为停用账号 |
@@ -162,11 +162,19 @@ remaining_seats   = TeachingClass.capacity - active_count(tc)
 ### 4.2 测试运行
 
 ```powershell
+# 方式一：脚本（g++；持久化目标要求 GCC 9+）
 .\build_and_test.ps1
+
+# 方式二：CMake（VS 2022 / GCC 9+ 均可）
+cmake -S . -B build\cmake -G "Visual Studio 17 2022" -A x64
+cmake --build build\cmake --config Release
+cd build\cmake; ctest -C Release --output-on-failure
 ```
 
-或按 README 手动编译三套测试。判定标准：三套测试均返回 0；Zhu 的测试会打印
-`PASS: <n> checks, 0 failure(s)`，另外两套打印各自的通过信息。每周把该输出作为飞书"测试证据"。
+判定标准：五套测试全部返回 0（选课核心、教师/管理员、学生查询、持久化、
+管理员持久化）；Zhu 的两套会打印 `PASS: <n> checks, 0 failure(s)`。
+`ctest -N` 应列出 5 个测试，其中包含 `persistent_administration`。
+每周把该输出作为飞书"测试证据"。
 
 ### 4.3 每周共同场景（必跑）
 

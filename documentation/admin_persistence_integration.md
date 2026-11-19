@@ -54,11 +54,16 @@ OperationResult r = admin.create_course_with_teaching_class(
 
 ## 5. 编译环境
 
-| 环境 | 状态 |
+区分"我实际跑过"和"支持但未在本机验证"：
+
+| 环境 | 我这边的实际结果 |
 |---|---|
-| MSVC 2022（19.4x，`cl /std:c++17 /utf-8`） | **实测通过**：8 个目标全部编译，5 套测试通过 |
-| GCC 13.2 | Kai 在其机器上实测通过（持久化模块要求 GCC 9+） |
-| GCC 8.1（MinGW-w64） | **不支持**：`<filesystem>` 头文件编译失败，仅能编译非持久化目标 |
+| MSVC 2022（19.43，`cl /std:c++17 /utf-8`） | **实测通过**：8 个目标编译，5 套测试通过 |
+| CMake 3.30 + VS 2022 生成器（Release / Debug） | **实测通过**：构建成功，`ctest` 5/5 |
+| GCC 8.1（MinGW-w64，本机） | **不可用**：`<filesystem>` 头文件编译失败，只能编译非持久化目标 |
+| GCC 9+ | 支持范围（持久化模块要求）；我本机没有 GCC 9+，未实测 |
+| GCC 13.2 | 由 Kai 在其机器上实测通过，我这里未复现 |
+| MSVC 2017 / 2019 / clang | 未测试，仅属支持范围 |
 
 `/utf-8` 是必需的：源码含中文注释，缺省代码页（936）会误读。
 
@@ -88,6 +93,27 @@ cl /nologo /utf-8 /std:c++17 /EHsc /Iheader_files /Fo:build\msvc\ /Fe:build\msvc
 | `persistent_administration_tests`（本层） | **89 checks, 0 failures**（exit 0） |
 | 三个演示程序 | exit 0 |
 | 上述两套自研测试的 `-DNDEBUG` 构建 | 分别 483 / 89 checks，0 failures |
+
+### CMake 构建与 ctest（同一环境实测）
+
+```powershell
+cmake -S . -B build\cmake -G "Visual Studio 17 2022" -A x64
+cmake --build build\cmake --config Release
+cd build\cmake; ctest -C Release --output-on-failure
+```
+
+2026-11-19 实测（`Release` 与 `Debug` 两个配置都跑过）：
+
+| 项 | 结果 |
+|---|---|
+| `cmake --build` | 11 个目标全部生成，含 `persistent_administration_service` 与 `persistent_administration_tests` |
+| `ctest -N` | 5 个测试：business_rules / teacher_and_administration_services / student_query_and_timetable / persistence / **persistent_administration** |
+| `ctest -C Release` | 5/5 通过 |
+| `ctest -C Debug` | 5/5 通过 |
+
+CMakeLists 说明：新增 `persistent_administration_service` 库（依赖 `persistence_service`）、
+`persistent_administration_tests` 可执行文件与 `add_test(NAME persistent_administration ...)`；
+MSVC 下项目级加了 `/utf-8`（源码含中文注释，缺省代码页会误读）。
 
 失败路径已验证会返回非零：故意把学分累计改回 `int` 时，测试打印 `FAIL` 并返回 1。
 
