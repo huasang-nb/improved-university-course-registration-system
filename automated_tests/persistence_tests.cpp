@@ -84,6 +84,18 @@ std::string strip_password_hash(std::string text) {
     return text;
 }
 
+bool has_enrollment(const SystemContext& context, int student_id,
+                    int teaching_class_id, EnrollmentStatus status) {
+    for (const Enrollment& record : context.all_enrollments()) {
+        if (record.student_id == student_id &&
+            record.teaching_class_id == teaching_class_id &&
+            record.status == status) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // 逐字段比较两份状态（不只比数量），用于验证失败后原状态未被改动。
 void expect_same_state(const SystemContext& left, const SystemContext& right,
                        int line) {
@@ -141,6 +153,8 @@ void expect_same_state(const SystemContext& left, const SystemContext& right,
             check(a.name == b.name, "student name", line);
             check(a.major == b.major, "student major", line);
             check(a.account_active == b.account_active, "student active", line);
+            check(a.password_hash == b.password_hash, "student password_hash",
+                  line);
         }
     }
     check(left.teachers().size() == right.teachers().size(), "teacher count",
@@ -154,6 +168,8 @@ void expect_same_state(const SystemContext& left, const SystemContext& right,
             check(a.name == b.name, "teacher name", line);
             check(a.department == b.department, "teacher department", line);
             check(a.account_active == b.account_active, "teacher active", line);
+            check(a.password_hash == b.password_hash, "teacher password_hash",
+                  line);
         }
     }
     check(left.administrators().size() == right.administrators().size(),
@@ -166,6 +182,8 @@ void expect_same_state(const SystemContext& left, const SystemContext& right,
             check(a.account_number == b.account_number, "admin number", line);
             check(a.name == b.name, "admin name", line);
             check(a.account_active == b.account_active, "admin active", line);
+            check(a.password_hash == b.password_hash, "admin password_hash",
+                  line);
         }
     }
     const std::vector<Enrollment> enrollments_left = left.all_enrollments();
@@ -1056,17 +1074,30 @@ int main() {
         CHECK(loaded.administrators()[0].password_hash == admin_hash);
         CHECK(loaded.students()[1].password_hash.empty());
 
-        // 类型错误：加载失败且当前内存状态不变
+        // 类型错误：加载失败，当前内存里三角色的非空哈希必须原样保留
         std::string bad = read_text(path);
-        CHECK(replace_once(bad, "\"password_hash\": \"\"",
-                           "\"password_hash\": 123"));
+        CHECK(replace_once(bad, "\"" + admin_hash + "\"", "123"));
         const std::string bad_path = dir + "/password_bad.json";
         write_text(bad_path, bad);
+
         SystemContext keep = make_seed_context();
+        Student keep_alice = keep.students()[0];
+        keep_alice.password_hash = student_hash;
+        keep.apply_student_change(keep_alice);
+        Teacher keep_wang = keep.teachers()[0];
+        keep_wang.password_hash = teacher_hash;
+        keep.apply_teacher_change(keep_wang);
+        Administrator keep_admin = keep.administrators()[0];
+        keep_admin.password_hash = admin_hash;
+        keep.apply_administrator_change(keep_admin);
         SystemContext snapshot = keep;
+
         CHECK(load_state(options_at(bad_path), keep).code ==
               ResultCode::StorageIntegrityError);
         EXPECT_SAME_STATE(keep, snapshot);
+        CHECK(keep.students()[0].password_hash == student_hash);
+        CHECK(keep.teachers()[0].password_hash == teacher_hash);
+        CHECK(keep.administrators()[0].password_hash == admin_hash);
     }
 
     // ==================================================================
@@ -1099,6 +1130,8 @@ int main() {
         CHECK(upgraded.teachers()[0].password_hash.empty());
         CHECK(upgraded.administrators()[0].password_hash.empty());
         CHECK(upgraded.all_enrollments().size() == 2);
+        CHECK(has_enrollment(upgraded, 1001, 10, EnrollmentStatus::Active));
+        CHECK(has_enrollment(upgraded, 1002, 30, EnrollmentStatus::Dropped));
         TeachingClass class10{};
         CHECK(upgraded.find_teaching_class(10, class10));
         CHECK(class10.teacher_id == 100);
@@ -1126,6 +1159,14 @@ int main() {
         CHECK(restored.teachers()[0].password_hash.empty());
         CHECK(restored.administrators()[0].password_hash.empty());
         CHECK(restored.all_enrollments().size() == 2);
+        CHECK(has_enrollment(restored, 1001, 10, EnrollmentStatus::Active));
+        CHECK(has_enrollment(restored, 1002, 30, EnrollmentStatus::Dropped));
+        TeachingClass restored_class10{};
+        CHECK(restored.find_teaching_class(10, restored_class10));
+        CHECK(restored_class10.teacher_id == 100);
+        TeachingClass restored_class30{};
+        CHECK(restored.find_teaching_class(30, restored_class30));
+        CHECK(restored_class30.teacher_id == 300);
         CHECK(read_text(restore_path).find("\"schema_version\": 2") !=
               std::string::npos);
         CHECK(read_text(backup_path) == v1_text);  // 恢复不覆盖 .bak
