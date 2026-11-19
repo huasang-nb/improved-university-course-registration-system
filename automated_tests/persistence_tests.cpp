@@ -1002,6 +1002,67 @@ int main() {
         CHECK(after_drop[0].teaching_class_id == 10);
     }
 
+    // ==================================================================
+    // 25. password_hash：v2 往返、空值、v1 旧快照兼容、类型错误。
+    // ==================================================================
+    {
+        SystemContext state = make_seed_context();
+        Student alice = state.students()[0];
+        alice.password_hash =
+            "$argon2id$v=19$m=65536,t=3,p=4$c2FsdA$aGFzaA";
+        state.apply_student_change(alice);
+        Teacher wang = state.teachers()[0];
+        wang.password_hash =
+            "$argon2id$v=19$m=65536,t=3,p=4$dGVhY2hlcg$aGFzaA";
+        state.apply_teacher_change(wang);
+
+        const std::string path = dir + "/password.json";
+        CHECK(save_state(state, options_at(path)).code == ResultCode::Success);
+        const std::string text = read_text(path);
+        CHECK(text.find("\"schema_version\": 2") != std::string::npos);
+        CHECK(text.find("\"password_hash\": \"$argon2id$") !=
+              std::string::npos);
+
+        SystemContext loaded = make_seed_context();
+        CHECK(load_state(options_at(path), loaded).code == ResultCode::Success);
+        CHECK(loaded.students()[0].password_hash == alice.password_hash);
+        CHECK(loaded.teachers()[0].password_hash == wang.password_hash);
+        CHECK(loaded.administrators()[0].password_hash.empty());
+
+        // v1 旧快照：去掉 password_hash 字段、版本改回 1，仍应加载
+        std::string v1 = read_text(path);
+        CHECK(replace_once(v1, "\"schema_version\": 2",
+                           "\"schema_version\": 1"));
+        CHECK(replace_once(
+            v1,
+            ", \"password_hash\": \"$argon2id$v=19$m=65536,t=3,p=4$c2FsdA$aGFzaA\"",
+            ""));
+        CHECK(replace_once(
+            v1,
+            ", \"password_hash\": \"$argon2id$v=19$m=65536,t=3,p=4$dGVhY2hlcg$aGFzaA\"",
+            ""));
+        CHECK(replace_once(v1, ", \"password_hash\": \"\"", ""));
+        const std::string v1_path = dir + "/password_v1.json";
+        write_text(v1_path, v1);
+        SystemContext v1_loaded = make_seed_context();
+        CHECK(load_state(options_at(v1_path), v1_loaded).code ==
+              ResultCode::Success);
+        CHECK(v1_loaded.students()[0].password_hash.empty());
+        CHECK(v1_loaded.teachers()[0].password_hash.empty());
+
+        // 类型错误：password_hash 必须是字符串
+        std::string bad = read_text(path);
+        CHECK(replace_once(bad, "\"password_hash\": \"\"",
+                           "\"password_hash\": 123"));
+        const std::string bad_path = dir + "/password_bad.json";
+        write_text(bad_path, bad);
+        SystemContext keep = make_seed_context();
+        SystemContext snapshot = keep;
+        CHECK(load_state(options_at(bad_path), keep).code ==
+              ResultCode::StorageIntegrityError);
+        EXPECT_SAME_STATE(keep, snapshot);
+    }
+
     if (g_failures != 0) {
         std::cerr << "FAILED: " << g_failures << " check(s)\n";
         return 1;

@@ -43,9 +43,9 @@ struct Student {
     std::string name;
     std::string major;
     bool account_active;         // 停用账号不得选课，由登录模块拦截
-    // 密码哈希（Argon2id 完整字符串）。只由凭据入口写入；
-    // 资料更新入口必须保留原值，不能因为调用方传了空串就清掉。
-    std::string password_hash;
+    // Argon2id PHC 字符串；空 = 未设置密码（不能密码登录）。持久化只做透明存储。
+    // 只由凭据入口写入；资料更新入口必须保留原值，不能因调用方传空串就清掉。
+    std::string password_hash{};
 };
 
 struct Teacher {
@@ -54,7 +54,7 @@ struct Teacher {
     std::string name;
     std::string department;
     bool account_active;
-    std::string password_hash;   // 同上，资料更新保留
+    std::string password_hash{};   // 同上，资料更新保留
 };
 
 struct Administrator {
@@ -62,7 +62,7 @@ struct Administrator {
     std::string account_number;
     std::string name;
     bool account_active;
-    std::string password_hash;
+    std::string password_hash{};
 };
 
 // ---------------------------------------------------------------------------

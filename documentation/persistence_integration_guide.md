@@ -99,8 +99,9 @@ restore_state(options, loaded);               // 或从 .bak 恢复
 
 ## 6. 恢复范围
 
-已支持：`Active` / `Dropped` 选课记录、学生/教师/管理员的 `account_active`、
-`round_opened`、课程与教学班（含 meetings）、`RegistrationRule`。
+已支持：`Active` / `Dropped` 选课记录、学生/教师/管理员的 `account_active` 与
+`password_hash`（Argon2id PHC 字符串，空 = 未设置密码）、`round_opened`、
+课程与教学班（含 meetings）、`RegistrationRule`。
 不保存：`fixed_now_`（测试专用）与派生值（余量、人数、课表，载入后现算）。
 
 **备份安全**：恢复只读 `.bak`，写回主文件时不再覆盖 `.bak`；
