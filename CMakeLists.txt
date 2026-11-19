@@ -124,3 +124,36 @@ else()
     target_compile_options(persistent_administration_service PRIVATE -Wall -Wextra)
     target_compile_options(persistent_administration_tests PRIVATE -Wall -Wextra)
 endif()
+
+# ---------------------------------------------------------------------------
+# [Zhu Ziliang 追加] 可选依赖：libsodium（Argon2id 密码哈希）。默认关闭。
+# 团队确认后再启用：
+#   cmake -DCOURSE_REGISTRATION_USE_SODIUM=ON -DSODIUM_ROOT=<解压目录> ...
+# SODIUM_ROOT 指向官方 libsodium-*-msvc.zip 的解压目录（含 include/ 与
+# x64/Release/v143/static/libsodium.lib）；GCC 9+ 环境可省略 SODIUM_ROOT，
+# 由 find_package(Sodium) 查找 libsodium-dev。
+# 供 LoginService 的密码哈希目标链接：${COURSE_REGISTRATION_SODIUM_TARGET}
+# ---------------------------------------------------------------------------
+option(COURSE_REGISTRATION_USE_SODIUM
+       "Link libsodium for Argon2id password hashing" OFF)
+if (COURSE_REGISTRATION_USE_SODIUM)
+    if (DEFINED SODIUM_ROOT)
+        add_library(sodium::sodium STATIC IMPORTED)
+        set_target_properties(sodium::sodium PROPERTIES
+            IMPORTED_LOCATION "${SODIUM_ROOT}/x64/Release/v143/static/libsodium.lib"
+            INTERFACE_INCLUDE_DIRECTORIES "${SODIUM_ROOT}/include"
+            INTERFACE_COMPILE_DEFINITIONS SODIUM_STATIC)
+        set(COURSE_REGISTRATION_SODIUM_TARGET sodium::sodium)
+        message(STATUS "libsodium: ${SODIUM_ROOT} (MSVC 静态链接, SODIUM_STATIC)")
+    else()
+        find_package(Sodium QUIET)
+        if (NOT Sodium_FOUND)
+            message(FATAL_ERROR
+                "找不到 libsodium。请安装 libsodium-dev（GCC 9+），或用 "
+                "-DSODIUM_ROOT=<libsodium-*-msvc 解压目录> 指向包含 "
+                "include/ 与 x64/Release/v143/static/libsodium.lib 的预编译包。")
+        endif()
+        set(COURSE_REGISTRATION_SODIUM_TARGET Sodium::Sodium)
+        message(STATUS "libsodium: found via find_package(Sodium)")
+    endif()
+endif()
