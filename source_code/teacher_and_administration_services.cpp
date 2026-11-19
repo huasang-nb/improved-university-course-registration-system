@@ -740,10 +740,11 @@ OperationResult AdministratorService::update_course(const UserIdentity& user,
     }
 
     // 改学分不能让任何在读学生超过学分上限，否则拒绝并指出学生。
+    // 累计用 long long：单门学分是 int，多门相加可能溢出 int 而上限判断失效。
     if (course.credits != existing.credits) {
         const RegistrationRule rule = context_.rule();
         for (const Student& student : context_.students()) {
-            int total = 0;
+            long long total = 0;
             for (const Enrollment& enrollment :
                  context_.active_enrollments(student.student_id)) {
                 TeachingClass enrolled_class{};
@@ -760,7 +761,7 @@ OperationResult AdministratorService::update_course(const UserIdentity& user,
                              ? course.credits
                              : enrolled_course.credits;
             }
-            if (total > rule.maximum_credits) {
+            if (total > static_cast<long long>(rule.maximum_credits)) {
                 return {ResultCode::CreditLimitExceeded,
                         "changing credits to " + std::to_string(course.credits) +
                             " makes student " + student.student_number +

@@ -9,6 +9,7 @@
 
 #include "teacher_and_administration_services.hpp"
 
+#include <climits>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -1380,6 +1381,58 @@ void test_data_integrity_reports_dangling_dropped_enrollment() {
     CHECK(fixture.context.all_enrollments().size() == 1);
 }
 
+// 修改课程学分时的学分累计必须用宽整数：极大值相加不能溢出绕过上限。
+void test_course_credit_change_cannot_overflow() {
+    Fixture fixture;
+    AdministratorService administration(fixture.context);
+
+    // 学生在课程 1（3 学分）与课程 2（4 学分）各有一个教学班。
+    CHECK_CODE(fixture.context.registration().enroll(1001, 11),
+               ResultCode::Success);
+    CHECK_CODE(fixture.context.registration().enroll(1001, 20),
+               ResultCode::Success);
+
+    Course course_one{};
+    Course course_two{};
+    CHECK(fixture.context.find_course(1, course_one));
+    CHECK(fixture.context.find_course(2, course_two));
+    CHECK(fixture.context.rule().maximum_credits == 18);
+
+    // 1. 极大值相加：int 累加会溢出成负数，从而绕过上限。
+    Course huge = course_two;
+    huge.credits = INT_MAX;
+    const OperationResult overflow =
+        administration.update_course(fixture.admin, huge);
+    CHECK_CODE(overflow, ResultCode::CreditLimitExceeded);
+    CHECK_MESSAGE(overflow, "above the limit");
+    Course stored{};
+    CHECK(fixture.context.find_course(2, stored));
+    CHECK(stored.credits == 4);  // 原学分不变
+    CHECK(fixture.context.enrollment_count(20) == 1);  // 选课记录不变
+
+    // 2. 恰好等于上限：3 + 14 + 4 = 21？不，14 + 4 = 18，正好等于上限，允许。
+    Course exact = course_one;
+    exact.credits = 14;
+    CHECK_CODE(administration.update_course(fixture.admin, exact),
+               ResultCode::Success);
+    CHECK(fixture.context.find_course(1, stored));
+    CHECK(stored.credits == 14);
+
+    // 改回 3 学分，便于后面的场景
+    CHECK_CODE(administration.update_course(fixture.admin, course_one),
+               ResultCode::Success);
+
+    // 3. 单门课程修改后超限：3 → 16，16 + 4 = 20 > 18。
+    Course too_high = course_one;
+    too_high.credits = 16;
+    const OperationResult over =
+        administration.update_course(fixture.admin, too_high);
+    CHECK_CODE(over, ResultCode::CreditLimitExceeded);
+    CHECK_MESSAGE(over, "S2023001");
+    CHECK(fixture.context.find_course(1, stored));
+    CHECK(stored.credits == 3);
+}
+
 // ---------------------------------------------------------------------------
 // 一致性检查
 // ---------------------------------------------------------------------------
@@ -1491,6 +1544,7 @@ int main() {
     test_uc09_cross_teacher_access_is_denied();
     test_uc09_roster_follows_active_enrollments();
     test_uc13_course_validation();
+    test_course_credit_change_cannot_overflow();
     test_uc13_teaching_class_validation();
     test_uc13_removal_respects_relationships();
     test_uc13_time_change_must_not_break_existing_timetables();
