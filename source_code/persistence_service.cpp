@@ -487,7 +487,12 @@ std::string build_state_json(const SystemContext& context) {
         out << ", \"major\": ";
         write_json_string(out, item.major);
         out << ", \"account_active\": "
-            << (item.account_active ? "true" : "false") << "}";
+            << (item.account_active ? "true" : "false");
+        if (!item.password_hash.empty()) {
+            out << ", \"password_hash\": ";
+            write_json_string(out, item.password_hash);
+        }
+        out << "}";
         if (i + 1 < students.size()) {
             out << ",";
         }
@@ -510,7 +515,12 @@ std::string build_state_json(const SystemContext& context) {
         out << ", \"department\": ";
         write_json_string(out, item.department);
         out << ", \"account_active\": "
-            << (item.account_active ? "true" : "false") << "}";
+            << (item.account_active ? "true" : "false");
+        if (!item.password_hash.empty()) {
+            out << ", \"password_hash\": ";
+            write_json_string(out, item.password_hash);
+        }
+        out << "}";
         if (i + 1 < teachers.size()) {
             out << ",";
         }
@@ -531,7 +541,12 @@ std::string build_state_json(const SystemContext& context) {
         out << ", \"name\": ";
         write_json_string(out, item.name);
         out << ", \"account_active\": "
-            << (item.account_active ? "true" : "false") << "}";
+            << (item.account_active ? "true" : "false");
+        if (!item.password_hash.empty()) {
+            out << ", \"password_hash\": ";
+            write_json_string(out, item.password_hash);
+        }
+        out << "}";
         if (i + 1 < administrators.size()) {
             out << ",";
         }
@@ -1235,6 +1250,13 @@ bool build_context_from_json(const JsonValue& root, SystemContext& out,
                      "account_active", error)) {
             return false;
         }
+        // password_hash 是可选项：兼容没有该字段的旧快照。
+        if (const JsonValue* hash_value = item.find("password_hash")) {
+            if (!as_string(hash_value, student.password_hash,
+                           "password_hash", error)) {
+                return false;
+            }
+        }
         students.push_back(std::move(student));
     }
 
@@ -1258,6 +1280,13 @@ bool build_context_from_json(const JsonValue& root, SystemContext& out,
                      "account_active", error)) {
             return false;
         }
+        // password_hash 是可选项：兼容没有该字段的旧快照。
+        if (const JsonValue* hash_value = item.find("password_hash")) {
+            if (!as_string(hash_value, teacher.password_hash,
+                           "password_hash", error)) {
+                return false;
+            }
+        }
         teachers.push_back(std::move(teacher));
     }
 
@@ -1278,6 +1307,13 @@ bool build_context_from_json(const JsonValue& root, SystemContext& out,
             !as_bool(item.find("account_active"), admin.account_active,
                      "account_active", error)) {
             return false;
+        }
+        // password_hash 是可选项：兼容没有该字段的旧快照。
+        if (const JsonValue* hash_value = item.find("password_hash")) {
+            if (!as_string(hash_value, admin.password_hash,
+                           "password_hash", error)) {
+                return false;
+            }
         }
         administrators.push_back(std::move(admin));
     }

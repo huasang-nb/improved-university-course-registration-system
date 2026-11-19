@@ -1324,7 +1324,10 @@ OperationResult AdministratorService::create_student(
                     " is already used by " + role_name(owner) + " " +
                     owner_number};
     }
-    context_.apply_student_change(student);
+    // 新建时不接受调用方提供的密码哈希：初始密码由后续独立入口设置。
+    Student record = student;
+    record.password_hash.clear();
+    context_.apply_student_change(record);
     return {ResultCode::Success,
             "student " + student.student_number + " created"};
 }
@@ -1362,7 +1365,14 @@ OperationResult AdministratorService::update_student(
                     " is already used by " + role_name(owner) + " " +
                     owner_number};
     }
-    context_.apply_student_change(student);
+    // 资料入口只更新资料字段：密码哈希沿用原记录，调用方传空串或别的哈希都不会覆盖。
+    // 设置与重置密码走独立入口。
+    Student updated = student;
+    const Student* current = context_.find_student(student.student_id);
+    if (current != nullptr) {
+        updated.password_hash = current->password_hash;
+    }
+    context_.apply_student_change(updated);
     return {ResultCode::Success,
             "student " + student.student_number + " updated"};
 }
@@ -1444,7 +1454,10 @@ OperationResult AdministratorService::create_teacher(
                     " is already used by " + role_name(owner) + " " +
                     owner_number};
     }
-    context_.apply_teacher_change(teacher);
+    // 同 create_student：新建不接受调用方的密码哈希。
+    Teacher record = teacher;
+    record.password_hash.clear();
+    context_.apply_teacher_change(record);
     return {ResultCode::Success,
             "teacher " + teacher.teacher_number + " created"};
 }
@@ -1482,7 +1495,13 @@ OperationResult AdministratorService::update_teacher(
                     " is already used by " + role_name(owner) + " " +
                     owner_number};
     }
-    context_.apply_teacher_change(teacher);
+    // 同 update_student：资料更新保留原密码哈希。
+    Teacher updated = teacher;
+    const Teacher* current = context_.find_teacher(teacher.teacher_id);
+    if (current != nullptr) {
+        updated.password_hash = current->password_hash;
+    }
+    context_.apply_teacher_change(updated);
     return {ResultCode::Success,
             "teacher " + teacher.teacher_number + " updated"};
 }

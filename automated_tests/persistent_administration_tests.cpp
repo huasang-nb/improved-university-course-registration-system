@@ -370,6 +370,121 @@ void test_views_share_the_published_state() {
     CHECK(reloaded.remaining_seats(40) == 2);
 }
 
+// 资料维护不能覆盖已有凭据：update_* 只改资料字段，password_hash 必须保留。
+void test_profile_update_preserves_password_hash() {
+    StorageFixture fixture("credentials");
+    PersistentAdministratorService gateway(fixture.context, fixture.options);
+
+    const std::string student_hash =
+        "$argon2id$v=19$m=65536,t=2,p=1$c2FsdHN0dWQ$aGFzaHN0dWQ";
+    const std::string teacher_hash =
+        "$argon2id$v=19$m=65536,t=2,p=1$c2FsZHRlYWNo$aGFzaHRlYWNo";
+
+    // 凭据入口尚未实现；测试用底层构造准备"已有哈希"的账号。
+    Student student = *fixture.context.find_student(1001);
+    student.password_hash = student_hash;
+    fixture.context.apply_student_change(student);
+    Teacher teacher = *fixture.context.find_teacher(100);
+    teacher.password_hash = teacher_hash;
+    fixture.context.apply_teacher_change(teacher);
+    CHECK_CODE(save_state(fixture.context, fixture.options), ResultCode::Success);
+
+    // 1) 改姓名与专业，调用方故意传空哈希
+    Student edited_student = student;
+    edited_student.name = "Alice Chen (renamed)";
+    edited_student.major = "Physics";
+    edited_student.password_hash.clear();
+    CHECK_CODE(gateway.update_student(fixture.admin, edited_student),
+               ResultCode::Success);
+
+    // 2) 改学号，仍传空哈希
+    Student renumbered = edited_student;
+    renumbered.student_number = "S2023999";
+    CHECK_CODE(gateway.update_student(fixture.admin, renumbered),
+               ResultCode::Success);
+
+    // 3) 停用账号，仍传空哈希
+    Student deactivated = renumbered;
+    deactivated.account_active = false;
+    CHECK_CODE(gateway.update_student(fixture.admin, deactivated),
+               ResultCode::Success);
+
+    // 教师：改姓名/系、改工号、停用，同样都传空哈希
+    Teacher edited_teacher = teacher;
+    edited_teacher.name = "Dr. Wang (renamed)";
+    edited_teacher.department = "Mathematics";
+    edited_teacher.password_hash.clear();
+    CHECK_CODE(gateway.update_teacher(fixture.admin, edited_teacher),
+               ResultCode::Success);
+
+    Teacher renumbered_teacher = edited_teacher;
+    renumbered_teacher.teacher_number = "T2099999";
+    CHECK_CODE(gateway.update_teacher(fixture.admin, renumbered_teacher),
+               ResultCode::Success);
+
+    Teacher deactivated_teacher = renumbered_teacher;
+    deactivated_teacher.account_active = false;
+    CHECK_CODE(gateway.update_teacher(fixture.admin, deactivated_teacher),
+               ResultCode::Success);
+
+    // 正式状态里哈希仍在
+    CHECK(fixture.context.find_student(1001)->password_hash == student_hash);
+    CHECK(fixture.context.find_teacher(100)->password_hash == teacher_hash);
+
+    // 4) 重新加载 JSON：资料与哈希都一致
+    SystemContext reloaded = make_seed_context();
+    CHECK_CODE(load_state(fixture.options, reloaded), ResultCode::Success);
+    const Student* stored_student = reloaded.find_student(1001);
+    CHECK(stored_student != nullptr);
+    CHECK(stored_student != nullptr &&
+          stored_student->password_hash == student_hash);
+    CHECK(stored_student != nullptr && stored_student->name == "Alice Chen (renamed)");
+    CHECK(stored_student != nullptr && stored_student->major == "Physics");
+    CHECK(stored_student != nullptr && stored_student->student_number == "S2023999");
+    CHECK(stored_student != nullptr && stored_student->account_active == false);
+
+    const Teacher* stored_teacher = reloaded.find_teacher(100);
+    CHECK(stored_teacher != nullptr);
+    CHECK(stored_teacher != nullptr && stored_teacher->password_hash == teacher_hash);
+    CHECK(stored_teacher != nullptr && stored_teacher->teacher_number == "T2099999");
+    CHECK(stored_teacher != nullptr && stored_teacher->department == "Mathematics");
+    CHECK(stored_teacher != nullptr && stored_teacher->account_active == false);
+
+    // 5) 业务拒绝：改成教师工号 -> 资料与哈希都不变，文件字节不变
+    const std::string before = text_of(fixture.options.path);
+    Student conflicting = deactivated;
+    conflicting.student_number = "T2099999";
+    conflicting.name = "Should Not Apply";
+    const OperationResult rejected =
+        gateway.update_student(fixture.admin, conflicting);
+    CHECK_CODE(rejected, ResultCode::DuplicateIdentifier);
+    CHECK(fixture.context.find_student(1001)->password_hash == student_hash);
+    CHECK(fixture.context.find_student(1001)->name == "Alice Chen (renamed)");
+    CHECK(text_of(fixture.options.path) == before);
+
+    // 6) 保存失败（路径不可写）：资料与哈希都不变
+    StorageOptions broken = fixture.options;
+    broken.path = (fixture.base / "nowhere" / "deeper" / "state.json").string();
+    broken.create_dirs = false;
+    PersistentAdministratorService failing_gateway(fixture.context, broken);
+    Student unsaved = deactivated;
+    unsaved.name = "Never Saved";
+    const OperationResult save_failed =
+        failing_gateway.update_student(fixture.admin, unsaved);
+    CHECK(save_failed.code != ResultCode::Success);
+    CHECK(fixture.context.find_student(1001)->name == "Alice Chen (renamed)");
+    CHECK(fixture.context.find_student(1001)->password_hash == student_hash);
+    CHECK(text_of(fixture.options.path) == before);
+
+    // 7) 新建入口不接受调用方提供的哈希（密码只能走独立入口）
+    CHECK_CODE(gateway.create_student(
+                   fixture.admin,
+                   {1004, "S2023004", "Dan Zhou", "Mathematics", true,
+                    "$argon2id$v=19$m=65536,t=2,p=1$bGVhaw$aGFzaA"}),
+               ResultCode::Success);
+    CHECK(fixture.context.find_student(1004)->password_hash.empty());
+}
+
 }  // namespace
 
 int main() {
@@ -383,6 +498,7 @@ int main() {
     test_round_lock_survives_restart();
     test_people_changes_persist();
     test_views_share_the_published_state();
+    test_profile_update_preserves_password_hash();
 
     std::cout << (g_failures == 0 ? "PASS" : "FAIL") << ": " << g_checks
               << " checks, " << g_failures << " failure(s)\n";
