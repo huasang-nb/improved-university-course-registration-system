@@ -6,10 +6,8 @@ set(CMAKE_CXX_STANDARD 17)
 if (MSVC)
     add_compile_options(/utf-8)
 endif()
+
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-if(MSVC)
-    add_compile_options(/utf-8)
-endif()
 
 add_library(course_registration_business_rules source_code/course_registration_business_rules.cpp)
 target_include_directories(course_registration_business_rules PUBLIC header_files)
@@ -161,3 +159,10 @@ else()
     target_compile_options(persistent_administration_service PRIVATE -Wall -Wextra)
     target_compile_options(persistent_administration_tests PRIVATE -Wall -Wextra)
 endif()
+
+# 三端使用同一持久化状态的整体验收。
+add_executable(shared_persistence_acceptance_tests
+    automated_tests/shared_persistence_acceptance_tests.cpp)
+target_link_libraries(shared_persistence_acceptance_tests
+    PRIVATE persistent_registration_service persistent_administration_service)
+add_test(NAME shared_persistence_acceptance COMMAND shared_persistence_acceptance_tests)

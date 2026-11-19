@@ -45,7 +45,7 @@ powershell -ExecutionPolicy Bypass -File .\run_registration_storage_acceptance.p
 GCC 使用 Kai 文档中的受支持版本，MinGW 8.1 的 filesystem 不受支持。
 构建文件集中在 `build/storage`，不修改系统执行策略。
 
-Debug 执行全部七套测试。Release 执行五套显式检查测试，跳过两个依赖 assert
+整合版 Debug 执行全部九套测试。Release 执行七套显式检查测试，跳过两个依赖 assert
 的旧测试；旧测试以 Debug 结果为准。新增检查失败返回非零退出码。
 
 `registration_credit_limit_tests` 验证极大学分累计、恰好上限与失败保持数据。
@@ -71,9 +71,11 @@ $demo = '.\build\storage\Debug\registration_storage_demonstration.exe'
 历史仍保留、教学班余量恢复。文件已存在时读取原状态，不要为重跑演示删除真实数据。
 该目录属于构建产物，不进入提交。
 
-## 后续仍待其他模块完成
+## 2026-11-19 整合补记
 
-Zhu 的 `update_course()` 学分累计仍是 int，需由其分支修复后再整合。
-课程与首班聚合创建、管理员修改保存，以及 Dropped 引用完整性检查的旧缺口，
-仍按原分工对接。此处只调用已复核的持久化接口，不代替这些管理员功能。
+已整合 Zhu `fb41e2f`：`update_course()` 学分累计溢出、课程与首班聚合创建、
+管理员修改持久化和 Dropped 悬空引用检查已接入。管理员接口见
+`admin_persistence_integration.md`。双方继续复用 `normalize_account_key()`。
+新增共享持久化验收，覆盖学生与管理员交替保存、失败不发布、停用学生即时生效及历史恢复。
+当前仍待实现真实登录、页面和 Web 并发协调。原班停用教师维护政策继续待讨论。
 运行时默认 state.json、.tmp 和 .bak 已忽略，不提交 exe 或构建目录。
