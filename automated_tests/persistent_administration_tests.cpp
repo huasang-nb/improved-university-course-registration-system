@@ -483,6 +483,39 @@ void test_profile_update_preserves_password_hash() {
                     "$argon2id$v=19$m=65536,t=2,p=1$bGVhaw$aGFzaA"}),
                ResultCode::Success);
     CHECK(fixture.context.find_student(1004)->password_hash.empty());
+
+    // 新建教师同样清空
+    CHECK_CODE(gateway.create_teacher(
+                   fixture.admin,
+                   {410, "T2020410", "Dr. New", "Physics", true,
+                    "$argon2id$v=19$m=65536,t=2,p=1$bGVhaGI$aGFzaGI"}),
+               ResultCode::Success);
+    CHECK(fixture.context.find_teacher(410)->password_hash.empty());
+
+    // 8) 更新时传"不同的非空哈希"也不能覆盖原值
+    Student forged = deactivated;
+    forged.password_hash =
+        "$argon2id$v=19$m=65536,t=2,p=1$Zm9yZ2Vk$Zm9yZ2Vk";
+    CHECK_CODE(gateway.update_student(fixture.admin, forged),
+               ResultCode::Success);
+    CHECK(fixture.context.find_student(1001)->password_hash == student_hash);
+
+    // 9) 一次普通的选课保存不能把哈希清掉（v1 写入器曾经会）
+    CHECK_CODE(fixture.context.registration().enroll(1002, 11),
+               ResultCode::Success);
+    CHECK_CODE(save_state(fixture.context, fixture.options),
+               ResultCode::Success);
+    const std::string saved = text_of(fixture.options.path);
+    CHECK(saved.find("\"schema_version\": 2") != std::string::npos);
+    CHECK(saved.find(student_hash) != std::string::npos);
+    CHECK(saved.find(teacher_hash) != std::string::npos);
+
+    SystemContext after_enrolment = make_seed_context();
+    CHECK_CODE(load_state(fixture.options, after_enrolment),
+               ResultCode::Success);
+    CHECK(after_enrolment.find_student(1001)->password_hash == student_hash);
+    CHECK(after_enrolment.find_teacher(100)->password_hash == teacher_hash);
+    CHECK(after_enrolment.active_enrollments(1002).size() == 1);
 }
 
 }  // namespace
