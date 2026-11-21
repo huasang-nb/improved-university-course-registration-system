@@ -176,3 +176,24 @@ add_executable(shared_persistence_acceptance_tests
 target_link_libraries(shared_persistence_acceptance_tests
     PRIVATE persistent_registration_service persistent_administration_service)
 add_test(NAME shared_persistence_acceptance COMMAND shared_persistence_acceptance_tests)
+
+# Zhang Yikai：学生端会话接口（第 3 周：学生界面/接口接入共享存储）。
+add_library(student_interface
+    source_code/student_interface.cpp)
+target_link_libraries(student_interface
+    PUBLIC persistent_registration_service student_query_and_timetable_services)
+target_include_directories(student_interface PUBLIC header_files)
+if(MSVC)
+    target_compile_options(student_interface PRIVATE /W4)
+else()
+    target_compile_options(student_interface PRIVATE -Wall -Wextra)
+endif()
+
+add_executable(student_interface_demonstration
+    source_code/student_interface_demonstration.cpp)
+target_link_libraries(student_interface_demonstration PRIVATE student_interface)
+
+add_executable(student_interface_tests
+    automated_tests/student_interface_tests.cpp)
+target_link_libraries(student_interface_tests PRIVATE student_interface)
+add_test(NAME student_interface COMMAND student_interface_tests)

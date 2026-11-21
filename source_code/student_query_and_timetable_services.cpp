@@ -70,7 +70,9 @@ bool StudentQueryService::course_matches(
                 continue;
             }
             const Teacher* teacher = context_.find_teacher(teaching_class.teacher_id);
-            if (teacher != nullptr &&
+            // 教师姓名只在实际会显示的班（教师仍启用）里匹配；否则停用教师的班
+            // 被隐藏后，仍会靠他的名字把别的老师的班带出来。
+            if (teacher != nullptr && teacher->account_active &&
                 contains_text(to_lower(teacher->name), lowered_keyword)) {
                 return true;
             }
@@ -92,7 +94,7 @@ bool StudentQueryService::course_matches(
             continue;
         }
         const Teacher* teacher = context_.find_teacher(teaching_class.teacher_id);
-        if (teacher != nullptr &&
+        if (teacher != nullptr && teacher->account_active &&
             contains_text(to_lower(teacher->name), lowered_keyword)) {
             return true;
         }
@@ -141,7 +143,22 @@ OperationResult StudentQueryService::search_courses(
         if (!course_matches(course, lowered_keyword, filter)) {
             continue;
         }
-        result.push_back(build_course_view(course, filter.teacher_id));
+        CourseView view = build_course_view(course, filter.teacher_id);
+        // 可选列表：只保留教师仍启用的教学班；课程没有可选班时整门不返回。
+        // 本人已有选课/课表走 view_timetable，不受这里影响。
+        view.teaching_classes.erase(
+            std::remove_if(
+                view.teaching_classes.begin(), view.teaching_classes.end(),
+                [this](const TeachingClassView& item) {
+                    const Teacher* teacher =
+                        context_.find_teacher(item.teacher_id);
+                    return teacher == nullptr || !teacher->account_active;
+                }),
+            view.teaching_classes.end());
+        if (view.teaching_classes.empty()) {
+            continue;
+        }
+        result.push_back(std::move(view));
     }
     std::sort(result.begin(), result.end(),
               [](const CourseView& left, const CourseView& right) {

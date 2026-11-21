@@ -36,7 +36,9 @@
 namespace course_registration {
 namespace {
 
-constexpr int kSchemaVersion = 1;
+constexpr int kSchemaVersion = 2;
+// v1 旧快照没有 password_hash；加载时仍接受，保存时统一写成 v2。
+constexpr int kMinSchemaVersion = 1;
 
 // ---------------------------------------------------------------------------
 // JSON 值
@@ -487,7 +489,10 @@ std::string build_state_json(const SystemContext& context) {
         out << ", \"major\": ";
         write_json_string(out, item.major);
         out << ", \"account_active\": "
-            << (item.account_active ? "true" : "false") << "}";
+            << (item.account_active ? "true" : "false")
+            << ", \"password_hash\": ";
+        write_json_string(out, item.password_hash);
+        out << "}";
         if (i + 1 < students.size()) {
             out << ",";
         }
@@ -510,7 +515,10 @@ std::string build_state_json(const SystemContext& context) {
         out << ", \"department\": ";
         write_json_string(out, item.department);
         out << ", \"account_active\": "
-            << (item.account_active ? "true" : "false") << "}";
+            << (item.account_active ? "true" : "false")
+            << ", \"password_hash\": ";
+        write_json_string(out, item.password_hash);
+        out << "}";
         if (i + 1 < teachers.size()) {
             out << ",";
         }
@@ -531,7 +539,10 @@ std::string build_state_json(const SystemContext& context) {
         out << ", \"name\": ";
         write_json_string(out, item.name);
         out << ", \"account_active\": "
-            << (item.account_active ? "true" : "false") << "}";
+            << (item.account_active ? "true" : "false")
+            << ", \"password_hash\": ";
+        write_json_string(out, item.password_hash);
+        out << "}";
         if (i + 1 < administrators.size()) {
             out << ",";
         }
@@ -590,6 +601,21 @@ bool as_string(const JsonValue* value, std::string& out,
     if (value == nullptr) {
         error = "missing field " + field;
         return false;
+    }
+    if (value->type != JsonValue::Type::String) {
+        error = "field " + field + " must be a string";
+        return false;
+    }
+    out = value->text;
+    return true;
+}
+
+// 可选字符串：旧快照（schema v1）没有 password_hash，缺失时按空串处理。
+bool as_optional_string(const JsonValue* value, std::string& out,
+                        const std::string& field, std::string& error) {
+    if (value == nullptr) {
+        out.clear();
+        return true;
     }
     if (value->type != JsonValue::Type::String) {
         error = "field " + field + " must be a string";
@@ -1111,7 +1137,8 @@ bool build_context_from_json(const JsonValue& root, SystemContext& out,
         error = "missing schema_version";
         return false;
     }
-    if (version->integer != kSchemaVersion) {
+    if (version->integer < kMinSchemaVersion ||
+        version->integer > kSchemaVersion) {
         error = "unsupported schema_version " +
                 std::to_string(version->integer);
         return false;
@@ -1235,6 +1262,11 @@ bool build_context_from_json(const JsonValue& root, SystemContext& out,
                      "account_active", error)) {
             return false;
         }
+        if (!as_optional_string(item.find("password_hash"),
+                                student.password_hash, "password_hash",
+                                error)) {
+            return false;
+        }
         students.push_back(std::move(student));
     }
 
@@ -1258,6 +1290,11 @@ bool build_context_from_json(const JsonValue& root, SystemContext& out,
                      "account_active", error)) {
             return false;
         }
+        if (!as_optional_string(item.find("password_hash"),
+                                teacher.password_hash, "password_hash",
+                                error)) {
+            return false;
+        }
         teachers.push_back(std::move(teacher));
     }
 
@@ -1277,6 +1314,11 @@ bool build_context_from_json(const JsonValue& root, SystemContext& out,
             !as_string(item.find("name"), admin.name, "name", error) ||
             !as_bool(item.find("account_active"), admin.account_active,
                      "account_active", error)) {
+            return false;
+        }
+        if (!as_optional_string(item.find("password_hash"),
+                                admin.password_hash, "password_hash",
+                                error)) {
             return false;
         }
         administrators.push_back(std::move(admin));

@@ -68,6 +68,34 @@ StorageOptions options_at(const std::string& path) {
     return options;
 }
 
+// 删掉所有 ", \"password_hash\": \"...\"" 片段，用来构造 v1 旧快照。
+// PHC 字符串里没有需要转义的双引号，找到下一个引号即可截断。
+std::string strip_password_hash(std::string text) {
+    const std::string key = ", \"password_hash\": \"";
+    size_t pos = 0;
+    while ((pos = text.find(key, pos)) != std::string::npos) {
+        const size_t value_start = pos + key.size();
+        const size_t close = text.find('"', value_start);
+        if (close == std::string::npos) {
+            break;
+        }
+        text.erase(pos, close + 1 - pos);
+    }
+    return text;
+}
+
+bool has_enrollment(const SystemContext& context, int student_id,
+                    int teaching_class_id, EnrollmentStatus status) {
+    for (const Enrollment& record : context.all_enrollments()) {
+        if (record.student_id == student_id &&
+            record.teaching_class_id == teaching_class_id &&
+            record.status == status) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // 逐字段比较两份状态（不只比数量），用于验证失败后原状态未被改动。
 void expect_same_state(const SystemContext& left, const SystemContext& right,
                        int line) {
@@ -125,6 +153,8 @@ void expect_same_state(const SystemContext& left, const SystemContext& right,
             check(a.name == b.name, "student name", line);
             check(a.major == b.major, "student major", line);
             check(a.account_active == b.account_active, "student active", line);
+            check(a.password_hash == b.password_hash, "student password_hash",
+                  line);
         }
     }
     check(left.teachers().size() == right.teachers().size(), "teacher count",
@@ -138,6 +168,8 @@ void expect_same_state(const SystemContext& left, const SystemContext& right,
             check(a.name == b.name, "teacher name", line);
             check(a.department == b.department, "teacher department", line);
             check(a.account_active == b.account_active, "teacher active", line);
+            check(a.password_hash == b.password_hash, "teacher password_hash",
+                  line);
         }
     }
     check(left.administrators().size() == right.administrators().size(),
@@ -150,6 +182,8 @@ void expect_same_state(const SystemContext& left, const SystemContext& right,
             check(a.account_number == b.account_number, "admin number", line);
             check(a.name == b.name, "admin name", line);
             check(a.account_active == b.account_active, "admin active", line);
+            check(a.password_hash == b.password_hash, "admin password_hash",
+                  line);
         }
     }
     const std::vector<Enrollment> enrollments_left = left.all_enrollments();
@@ -1000,6 +1034,199 @@ int main() {
               ResultCode::Success);
         CHECK(after_drop.size() == 1);
         CHECK(after_drop[0].teaching_class_id == 10);
+    }
+
+    // ==================================================================
+    // 22. 停用教师：保存/恢复必须保留教师启停状态、教学班关联与 Active/Dropped。
+    // ==================================================================
+    {
+        std::vector<std::string> problems;
+        SystemContext state = make_seed_context();
+        Teacher teacher = state.teachers()[0];  // Dr. Wang 教 class 10
+        teacher.account_active = false;
+        state.apply_teacher_change(teacher);
+        state.registration().restore_enrollments(
+            {{1001, 10, EnrollmentStatus::Active},
+             {1002, 10, EnrollmentStatus::Dropped}});
+        CHECK(validate_state(state, problems).code == ResultCode::Success);
+
+        const std::string path = dir + "/inactive_teacher.json";
+        CHECK(save_state(state, options_at(path)).code == ResultCode::Success);
+
+        // 文件里必须仍保留停用教师、班级指向该教师、两条记录
+        const std::string text = read_text(path);
+        CHECK(text.find("\"teacher_id\": 100") != std::string::npos);
+        CHECK(text.find("\"account_active\": false") != std::string::npos);
+        CHECK(text.find("\"student_id\": 1002") != std::string::npos);
+
+        // 加载不因"历史关联停用教师"而拒绝
+        SystemContext loaded = make_seed_context();
+        CHECK(load_state(options_at(path), loaded).code == ResultCode::Success);
+        const Teacher* loaded_teacher = loaded.find_teacher(100);
+        CHECK(loaded_teacher != nullptr);
+        CHECK(loaded_teacher != nullptr &&
+              loaded_teacher->account_active == false);
+        TeachingClass loaded_class{};
+        CHECK(loaded.find_teaching_class(10, loaded_class));
+        CHECK(loaded_class.teacher_id == 100);
+        CHECK(loaded.all_enrollments().size() == 2);
+
+        // 已有选课/课表继续正常展示（不因教师停用被隐藏）
+        StudentQueryService query(loaded);
+        const UserIdentity student{1001, "S2023001", Role::Student};
+        std::vector<TimetableEntry> table;
+        CHECK(query.view_timetable(student, table).code == ResultCode::Success);
+        CHECK(table.size() == 1);
+        CHECK(table[0].teaching_class_id == 10);
+
+        // 恢复（.bak）同样成功，且保留停用状态与两条记录
+        SystemContext second = loaded;
+        CHECK(save_state(second, options_at(path)).code == ResultCode::Success);
+        write_text(path, "{ broken");
+        SystemContext restored = make_seed_context();
+        CHECK(restore_state(options_at(path), restored).code ==
+              ResultCode::Success);
+        CHECK(restored.all_enrollments().size() == 2);
+        const Teacher* restored_teacher = restored.find_teacher(100);
+        CHECK(restored_teacher != nullptr);
+        CHECK(restored_teacher != nullptr &&
+              restored_teacher->account_active == false);
+    }
+
+    // ==================================================================
+    // 25. password_hash：三角色往返、空哈希保留、类型错误拒绝。
+    // ==================================================================
+    {
+        SystemContext state = make_seed_context();
+        const std::string student_hash =
+            "$argon2id$v=19$m=65536,t=3,p=4$c3R1ZGVudA$YWJjMTIz";
+        const std::string teacher_hash =
+            "$argon2id$v=19$m=65536,t=3,p=4$dGVhY2hlcg$ZGVmNDU2";
+        const std::string admin_hash =
+            "$argon2id$v=19$m=65536,t=3,p=4$YWRtaW4$Z2hpNzg5";
+
+        Student alice = state.students()[0];
+        alice.password_hash = student_hash;
+        state.apply_student_change(alice);
+        Teacher wang = state.teachers()[0];
+        wang.password_hash = teacher_hash;
+        state.apply_teacher_change(wang);
+        Administrator admin = state.administrators()[0];
+        admin.password_hash = admin_hash;
+        state.apply_administrator_change(admin);
+        // 学生 1002 保持空哈希，作为“尚未设置密码”的对照
+
+        const std::string path = dir + "/password.json";
+        CHECK(save_state(state, options_at(path)).code == ResultCode::Success);
+        const std::string text = read_text(path);
+        CHECK(text.find("\"schema_version\": 2") != std::string::npos);
+        CHECK(text.find(student_hash) != std::string::npos);
+        CHECK(text.find(teacher_hash) != std::string::npos);
+        CHECK(text.find(admin_hash) != std::string::npos);
+
+        SystemContext loaded = make_seed_context();
+        CHECK(load_state(options_at(path), loaded).code == ResultCode::Success);
+        CHECK(loaded.students()[0].password_hash == student_hash);
+        CHECK(loaded.teachers()[0].password_hash == teacher_hash);
+        CHECK(loaded.administrators()[0].password_hash == admin_hash);
+        CHECK(loaded.students()[1].password_hash.empty());
+
+        // 类型错误：加载失败，当前内存里三角色的非空哈希必须原样保留
+        std::string bad = read_text(path);
+        CHECK(replace_once(bad, "\"" + admin_hash + "\"", "123"));
+        const std::string bad_path = dir + "/password_bad.json";
+        write_text(bad_path, bad);
+
+        SystemContext keep = make_seed_context();
+        Student keep_alice = keep.students()[0];
+        keep_alice.password_hash = student_hash;
+        keep.apply_student_change(keep_alice);
+        Teacher keep_wang = keep.teachers()[0];
+        keep_wang.password_hash = teacher_hash;
+        keep.apply_teacher_change(keep_wang);
+        Administrator keep_admin = keep.administrators()[0];
+        keep_admin.password_hash = admin_hash;
+        keep.apply_administrator_change(keep_admin);
+        SystemContext snapshot = keep;
+
+        CHECK(load_state(options_at(bad_path), keep).code ==
+              ResultCode::StorageIntegrityError);
+        EXPECT_SAME_STATE(keep, snapshot);
+        CHECK(keep.students()[0].password_hash == student_hash);
+        CHECK(keep.teachers()[0].password_hash == teacher_hash);
+        CHECK(keep.administrators()[0].password_hash == admin_hash);
+    }
+
+    // ==================================================================
+    // 26. v1 升级：全部人员无 password_hash，加载→再保存→v1 .bak 恢复。
+    // ==================================================================
+    {
+        // 先造一份带选课记录和任课关系的 v2 文件
+        SystemContext source = make_seed_context();
+        source.registration().restore_enrollments(
+            {{1001, 10, EnrollmentStatus::Active},
+             {1002, 30, EnrollmentStatus::Dropped}});
+        const std::string v2_path = dir + "/upgrade_source.json";
+        CHECK(save_state(source, options_at(v2_path)).code ==
+              ResultCode::Success);
+
+        // 转成 v1：版本改 1，删掉所有 password_hash 字段
+        std::string v1_text = read_text(v2_path);
+        CHECK(replace_once(v1_text, "\"schema_version\": 2",
+                           "\"schema_version\": 1"));
+        v1_text = strip_password_hash(v1_text);
+        CHECK(v1_text.find("\"password_hash\"") == std::string::npos);
+        const std::string v1_path = dir + "/upgrade_v1.json";
+        write_text(v1_path, v1_text);
+
+        // 加载 v1：三类账号哈希都为空，选课与任课关系保留
+        SystemContext upgraded = make_seed_context();
+        CHECK(load_state(options_at(v1_path), upgraded).code ==
+              ResultCode::Success);
+        CHECK(upgraded.students()[0].password_hash.empty());
+        CHECK(upgraded.teachers()[0].password_hash.empty());
+        CHECK(upgraded.administrators()[0].password_hash.empty());
+        CHECK(upgraded.all_enrollments().size() == 2);
+        CHECK(has_enrollment(upgraded, 1001, 10, EnrollmentStatus::Active));
+        CHECK(has_enrollment(upgraded, 1002, 30, EnrollmentStatus::Dropped));
+        TeachingClass class10{};
+        CHECK(upgraded.find_teaching_class(10, class10));
+        CHECK(class10.teacher_id == 100);
+        TeachingClass class30{};
+        CHECK(upgraded.find_teaching_class(30, class30));
+        CHECK(class30.teacher_id == 300);
+
+        // 再保存：自动升级为 v2，password_hash 字段齐备
+        const std::string upgraded_path = dir + "/upgrade_v2.json";
+        CHECK(save_state(upgraded, options_at(upgraded_path)).code ==
+              ResultCode::Success);
+        const std::string upgraded_text = read_text(upgraded_path);
+        CHECK(upgraded_text.find("\"schema_version\": 2") !=
+              std::string::npos);
+        CHECK(upgraded_text.find("\"password_hash\"") != std::string::npos);
+
+        // 从 v1 的 .bak 恢复：主文件写成 v2，.bak 原样保留
+        const std::string restore_path = dir + "/upgrade_restore.json";
+        const std::string backup_path = restore_path + ".bak";
+        write_text(backup_path, v1_text);
+        SystemContext restored = make_seed_context();
+        CHECK(restore_state(options_at(restore_path), restored).code ==
+              ResultCode::Success);
+        CHECK(restored.students()[0].password_hash.empty());
+        CHECK(restored.teachers()[0].password_hash.empty());
+        CHECK(restored.administrators()[0].password_hash.empty());
+        CHECK(restored.all_enrollments().size() == 2);
+        CHECK(has_enrollment(restored, 1001, 10, EnrollmentStatus::Active));
+        CHECK(has_enrollment(restored, 1002, 30, EnrollmentStatus::Dropped));
+        TeachingClass restored_class10{};
+        CHECK(restored.find_teaching_class(10, restored_class10));
+        CHECK(restored_class10.teacher_id == 100);
+        TeachingClass restored_class30{};
+        CHECK(restored.find_teaching_class(30, restored_class30));
+        CHECK(restored_class30.teacher_id == 300);
+        CHECK(read_text(restore_path).find("\"schema_version\": 2") !=
+              std::string::npos);
+        CHECK(read_text(backup_path) == v1_text);  // 恢复不覆盖 .bak
     }
 
     if (g_failures != 0) {
