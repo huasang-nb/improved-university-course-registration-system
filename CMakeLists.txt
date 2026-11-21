@@ -127,20 +127,21 @@ endif()
 
 # ---------------------------------------------------------------------------
 # [Zhu Ziliang 追加] 可选依赖：libsodium（Argon2id 密码哈希），默认关闭。
+# 本阶段只验收 **Windows x64 + MSVC 2022**；Linux/GCC 的接入未验证、未实现。
 #
-# MSVC（官方 libsodium-*-msvc.zip 解压目录）：
+# 启用：
 #   cmake -S . -B build\cmake -G "Visual Studio 17 2022" -A x64 -DCOURSE_REGISTRATION_USE_SODIUM=ON -DSODIUM_ROOT=C:\path\to\libsodium
-# Debian/Ubuntu（libsodium-dev 提供 libsodium.pc）：
-#   cmake -S . -B build -DCOURSE_REGISTRATION_USE_SODIUM=ON
+# SODIUM_ROOT 指向官方 libsodium-*-msvc.zip 的解压目录（含 include\sodium.h 与
+# x64\{Debug,Release}\v143\{dynamic,static}\libsodium.lib）。
 #
-# 配置阶段检查头文件、库文件与目标架构，并用 try_compile 实际链接一次。
-# MSVC 优先用 dynamic 版（动态库自带运行库，避免 LNK4098）；只有 static 时
-# 通过 course_registration_link_sodium() 统一运行库为 /MT。
+# 配置阶段会校验目录、头文件、架构、Debug/Release 两套库文件，并实际链接一次；
+# 任一不满足直接失败，不会出现"配置成功、构建才失败"。
+# 需要密码哈希的目标调用 course_registration_link_sodium(<target>) 链接。
 # ---------------------------------------------------------------------------
 option(COURSE_REGISTRATION_USE_SODIUM
        "Link libsodium for Argon2id password hashing" OFF)
 
-# 供需要密码哈希的目标调用：链接 +（Windows）拷贝运行时 DLL + 必要时统一运行库。
+# 供需要密码哈希的目标调用：链接 +（动态）拷贝 DLL +（静态）统一运行库。
 function(course_registration_link_sodium target_name)
     target_link_libraries(${target_name} PRIVATE ${COURSE_REGISTRATION_SODIUM_TARGET})
     if (COURSE_REGISTRATION_SODIUM_STATIC AND MSVC)
@@ -148,7 +149,6 @@ function(course_registration_link_sodium target_name)
         set_property(TARGET ${target_name} PROPERTY MSVC_RUNTIME_LIBRARY
                      "MultiThreaded$<$<CONFIG:Debug>:Debug>")
     endif()
-    # 只有动态库才有 DLL 需要拷贝；静态链接时 TARGET_RUNTIME_DLLS 为空。
     if (WIN32 AND NOT COURSE_REGISTRATION_SODIUM_STATIC)
         add_custom_command(TARGET ${target_name} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -158,106 +158,94 @@ function(course_registration_link_sodium target_name)
     endif()
 endfunction()
 
+if (DEFINED SODIUM_ROOT AND NOT COURSE_REGISTRATION_USE_SODIUM)
+    message(FATAL_ERROR
+        "设置了 SODIUM_ROOT 但没有开启 COURSE_REGISTRATION_USE_SODIUM=ON。"
+        "请同时加上 -DCOURSE_REGISTRATION_USE_SODIUM=ON，或去掉 SODIUM_ROOT。")
+endif()
+
 if (COURSE_REGISTRATION_USE_SODIUM)
-    if (DEFINED SODIUM_ROOT)
-        if (NOT IS_DIRECTORY "${SODIUM_ROOT}")
-            message(FATAL_ERROR "SODIUM_ROOT 不存在：${SODIUM_ROOT}")
-        endif()
-        if (NOT EXISTS "${SODIUM_ROOT}/include/sodium.h")
-            message(FATAL_ERROR
-                "SODIUM_ROOT 缺少头文件：${SODIUM_ROOT}/include/sodium.h "
-                "（应指向官方 libsodium-*-msvc.zip 的解压目录）")
-        endif()
-
-        if (CMAKE_SIZEOF_VOID_P EQUAL 8)
-            set(_sodium_arch "x64")
-        else()
-            set(_sodium_arch "Win32")
-        endif()
-
-        set(_dyn_debug  "${SODIUM_ROOT}/${_sodium_arch}/Debug/v143/dynamic")
-        set(_dyn_release "${SODIUM_ROOT}/${_sodium_arch}/Release/v143/dynamic")
-        set(_static_debug  "${SODIUM_ROOT}/${_sodium_arch}/Debug/v143/static/libsodium.lib")
-        set(_static_release "${SODIUM_ROOT}/${_sodium_arch}/Release/v143/static/libsodium.lib")
-
-        if (EXISTS "${_dyn_release}/libsodium.lib" AND EXISTS "${_dyn_debug}/libsodium.lib")
-            # 动态库：不定义 SODIUM_STATIC；IMPORTED_IMPLIB 用于链接，IMPORTED_LOCATION 指向 DLL 以便拷贝。
-            add_library(sodium::sodium SHARED IMPORTED)
-            set_target_properties(sodium::sodium PROPERTIES
-                IMPORTED_CONFIGURATIONS "DEBUG;RELEASE"
-                IMPORTED_IMPLIB_DEBUG   "${_dyn_debug}/libsodium.lib"
-                IMPORTED_IMPLIB_RELEASE "${_dyn_release}/libsodium.lib"
-                IMPORTED_LOCATION_DEBUG   "${_dyn_debug}/libsodium.dll"
-                IMPORTED_LOCATION_RELEASE "${_dyn_release}/libsodium.dll"
-                INTERFACE_INCLUDE_DIRECTORIES "${SODIUM_ROOT}/include")
-            set(COURSE_REGISTRATION_SODIUM_STATIC OFF)
-            set(COURSE_REGISTRATION_SODIUM_NAME "MSVC 动态库 ${_sodium_arch}/v143/dynamic")
-        elseif (EXISTS "${_static_release}")
-            # 只有静态库：定义 SODIUM_STATIC，并把使用者切成 /MT。
-            if (NOT EXISTS "${_static_debug}")
-                message(WARNING
-                    "缺少 Debug 静态库：${_static_debug}；Debug 配置回退到 Release 库。")
-                set(_static_debug "${_static_release}")
-            endif()
-            add_library(sodium::sodium UNKNOWN IMPORTED)
-            set_target_properties(sodium::sodium PROPERTIES
-                IMPORTED_CONFIGURATIONS "DEBUG;RELEASE"
-                IMPORTED_LOCATION_DEBUG   "${_static_debug}"
-                IMPORTED_LOCATION_RELEASE "${_static_release}"
-                INTERFACE_INCLUDE_DIRECTORIES "${SODIUM_ROOT}/include"
-                INTERFACE_COMPILE_DEFINITIONS SODIUM_STATIC)
-            set(COURSE_REGISTRATION_SODIUM_STATIC ON)
-            set(COURSE_REGISTRATION_SODIUM_NAME "MSVC 静态库 ${_sodium_arch}/v143/static（/MT）")
-        else()
-            message(FATAL_ERROR
-                "在 ${SODIUM_ROOT} 下找不到 libsodium 库。"
-                "需要 ${_sodium_arch}/{Debug,Release}/v143/{dynamic,static}/libsodium.lib；"
-                "当前指针大小 ${CMAKE_SIZEOF_VOID_P} 字节，对应架构 ${_sodium_arch}。")
-        endif()
-        set(COURSE_REGISTRATION_SODIUM_TARGET sodium::sodium)
-    else()
-        # Linux：libsodium-dev 提供 libsodium.pc，用 pkg-config；没有时退回 find_package。
-        find_package(PkgConfig QUIET)
-        if (PkgConfig_FOUND)
-            pkg_check_modules(SODIUM QUIET IMPORTED_TARGET libsodium)
-        endif()
-        if (TARGET PkgConfig::SODIUM)
-            set(COURSE_REGISTRATION_SODIUM_TARGET PkgConfig::SODIUM)
-            set(COURSE_REGISTRATION_SODIUM_STATIC OFF)
-            set(COURSE_REGISTRATION_SODIUM_NAME "pkg-config libsodium")
-        else()
-            find_package(Sodium QUIET)
-            if (NOT Sodium_FOUND)
-                message(FATAL_ERROR
-                    "找不到 libsodium。Debian/Ubuntu 请安装 libsodium-dev（提供 libsodium.pc）"
-                    "并确保 pkg-config 可用；Windows 请用 "
-                    "-DSODIUM_ROOT=<libsodium-*-msvc 解压目录>。")
-            endif()
-            set(COURSE_REGISTRATION_SODIUM_TARGET Sodium::Sodium)
-            set(COURSE_REGISTRATION_SODIUM_STATIC OFF)
-            set(COURSE_REGISTRATION_SODIUM_NAME "find_package(Sodium)")
-        endif()
+    if (NOT MSVC)
+        message(FATAL_ERROR
+            "本阶段只支持 Windows x64 + MSVC 2022 构建 libsodium 目标；"
+            "Linux/GCC 的接入尚未验证，未实现。")
+    endif()
+    if (NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
+        message(FATAL_ERROR
+            "本阶段只支持 64 位构建（-A x64）；当前指针大小 "
+            "${CMAKE_SIZEOF_VOID_P} 字节。")
+    endif()
+    if (NOT DEFINED SODIUM_ROOT)
+        message(FATAL_ERROR
+            "本阶段请显式指定 -DSODIUM_ROOT=<libsodium-*-msvc 解压目录>；"
+            "Linux/GCC 的 pkg-config 方案未验证，未实现。")
     endif()
 
-    # 配置期实际链接一次：能编译但链不上时立刻失败。
-    set(CMAKE_TRY_COMPILE_CONFIGURATION Release)
+    if (NOT IS_DIRECTORY "${SODIUM_ROOT}")
+        message(FATAL_ERROR "SODIUM_ROOT 不存在：${SODIUM_ROOT}")
+    endif()
+    if (NOT EXISTS "${SODIUM_ROOT}/include/sodium.h")
+        message(FATAL_ERROR
+            "SODIUM_ROOT 缺少头文件：${SODIUM_ROOT}/include/sodium.h "
+            "（应指向官方 libsodium-*-msvc.zip 的解压目录）")
+    endif()
+
+    set(_sodium_arch "x64")
+    set(_dyn_debug   "${SODIUM_ROOT}/${_sodium_arch}/Debug/v143/dynamic")
+    set(_dyn_release "${SODIUM_ROOT}/${_sodium_arch}/Release/v143/dynamic")
+    set(_static_debug   "${SODIUM_ROOT}/${_sodium_arch}/Debug/v143/static/libsodium.lib")
+    set(_static_release "${SODIUM_ROOT}/${_sodium_arch}/Release/v143/static/libsodium.lib")
+
+    # 动态库优先（运行库在 DLL 内，天然不冲突）；否则要求两套静态库齐全。
+    if (EXISTS "${_dyn_release}/libsodium.lib" AND EXISTS "${_dyn_debug}/libsodium.lib")
+        add_library(sodium::sodium SHARED IMPORTED)
+        set_target_properties(sodium::sodium PROPERTIES
+            IMPORTED_CONFIGURATIONS "DEBUG;RELEASE"
+            IMPORTED_IMPLIB_DEBUG     "${_dyn_debug}/libsodium.lib"
+            IMPORTED_IMPLIB_RELEASE   "${_dyn_release}/libsodium.lib"
+            IMPORTED_LOCATION_DEBUG   "${_dyn_debug}/libsodium.dll"
+            IMPORTED_LOCATION_RELEASE "${_dyn_release}/libsodium.dll"
+            INTERFACE_INCLUDE_DIRECTORIES "${SODIUM_ROOT}/include")
+        set(COURSE_REGISTRATION_SODIUM_STATIC OFF)
+        set(COURSE_REGISTRATION_SODIUM_NAME "MSVC 动态库 x64/v143/dynamic")
+    elseif (EXISTS "${_static_debug}" AND EXISTS "${_static_release}")
+        add_library(sodium::sodium UNKNOWN IMPORTED)
+        set_target_properties(sodium::sodium PROPERTIES
+            IMPORTED_CONFIGURATIONS "DEBUG;RELEASE"
+            IMPORTED_LOCATION_DEBUG   "${_static_debug}"
+            IMPORTED_LOCATION_RELEASE "${_static_release}"
+            INTERFACE_INCLUDE_DIRECTORIES "${SODIUM_ROOT}/include"
+            INTERFACE_COMPILE_DEFINITIONS SODIUM_STATIC)
+        set(COURSE_REGISTRATION_SODIUM_STATIC ON)
+        set(COURSE_REGISTRATION_SODIUM_NAME "MSVC 静态库 x64/v143/static（/MT）")
+    else()
+        message(FATAL_ERROR
+            "在 ${SODIUM_ROOT} 下找不到完整的 libsodium 库。需要其中之一：\n"
+            "  ${_dyn_debug}/libsodium.lib 与 ${_dyn_release}/libsodium.lib\n"
+            "  ${_static_debug} 与 ${_static_release}")
+    endif()
+    set(COURSE_REGISTRATION_SODIUM_TARGET sodium::sodium)
+
+    # 配置期实际链接：Debug 与 Release 各检查一次。
     file(WRITE "${CMAKE_BINARY_DIR}/sodium_probe.cpp"
          "#include <sodium.h>\nint main() { return sodium_init() < 0 ? 1 : 0; }\n")
-    set(CMAKE_REQUIRED_LIBRARIES ${COURSE_REGISTRATION_SODIUM_TARGET})
-    try_compile(_sodium_link_ok
-        "${CMAKE_BINARY_DIR}/sodium_probe_build"
-        "${CMAKE_BINARY_DIR}/sodium_probe.cpp"
-        LINK_LIBRARIES ${COURSE_REGISTRATION_SODIUM_TARGET}
-        CXX_STANDARD 17)
-    if (NOT _sodium_link_ok)
-        message(FATAL_ERROR
-            "libsodium 链接检查失败（${COURSE_REGISTRATION_SODIUM_NAME}）。"
-            "请确认库架构与生成器一致（-A x64 对应 x64 库），并检查运行库是否匹配。")
-    endif()
+    foreach(_cfg Debug Release)
+        set(CMAKE_TRY_COMPILE_CONFIGURATION ${_cfg})
+        try_compile(_sodium_link_${_cfg}
+            "${CMAKE_BINARY_DIR}/sodium_probe_${_cfg}"
+            "${CMAKE_BINARY_DIR}/sodium_probe.cpp"
+            LINK_LIBRARIES ${COURSE_REGISTRATION_SODIUM_TARGET}
+            CXX_STANDARD 17)
+        if (NOT _sodium_link_${_cfg})
+            message(FATAL_ERROR
+                "libsodium 在 ${_cfg} 配置下链接失败（${COURSE_REGISTRATION_SODIUM_NAME}）。"
+                "请确认库文件架构为 x64、Debug/Release 两套库齐全。")
+        endif()
+    endforeach()
 
     add_executable(libsodium_probe automated_tests/libsodium_probe_tests.cpp)
     course_registration_link_sodium(libsodium_probe)
     add_test(NAME libsodium_probe COMMAND libsodium_probe)
 
-    message(STATUS "libsodium: ${COURSE_REGISTRATION_SODIUM_NAME}（配置期链接检查通过）")
+    message(STATUS "libsodium: ${COURSE_REGISTRATION_SODIUM_NAME}（Debug/Release 链接检查通过）")
 endif()
