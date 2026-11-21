@@ -197,3 +197,146 @@ add_executable(student_interface_tests
     automated_tests/student_interface_tests.cpp)
 target_link_libraries(student_interface_tests PRIVATE student_interface)
 add_test(NAME student_interface COMMAND student_interface_tests)
+
+# ---------------------------------------------------------------------------
+# [Zhu Ziliang 追加] 可选依赖：libsodium（Argon2id 密码哈希），默认关闭。
+# 本阶段只验收 **Windows x64 + MSVC 2022 + 官方动态包（dynamic）**：
+#   * 静态链接、Linux/GCC 都未验证，配置阶段直接拒绝；
+#   * 需要 CMake 3.21+（用到 TARGET_RUNTIME_DLLS 拷贝 DLL）。
+#
+# 启用：
+#   cmake -S . -B build\cmake -G "Visual Studio 17 2022" -A x64 -DCOURSE_REGISTRATION_USE_SODIUM=ON -DSODIUM_ROOT=C:\path\to\libsodium
+# SODIUM_ROOT 指向官方 libsodium-*-msvc.zip 解压目录，需包含
+#   include\sodium.h
+#   x64\Debug\v143\dynamic\libsodium.lib 与 libsodium.dll
+#   x64\Release\v143\dynamic\libsodium.lib 与 libsodium.dll
+#
+# 需要密码哈希的目标调用 course_registration_link_sodium(<target>)：链接并拷贝 DLL。
+# ---------------------------------------------------------------------------
+option(COURSE_REGISTRATION_USE_SODIUM
+       "Link libsodium for Argon2id password hashing" OFF)
+
+function(course_registration_link_sodium target_name)
+    target_link_libraries(${target_name} PRIVATE ${COURSE_REGISTRATION_SODIUM_TARGET})
+    if (WIN32)
+        add_custom_command(TARGET ${target_name} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    $<TARGET_RUNTIME_DLLS:${target_name}>
+                    $<TARGET_FILE_DIR:${target_name}>
+            COMMAND_EXPAND_LISTS)
+    endif()
+endfunction()
+
+if (DEFINED SODIUM_ROOT AND NOT COURSE_REGISTRATION_USE_SODIUM)
+    message(FATAL_ERROR
+        "设置了 SODIUM_ROOT 但没有开启 COURSE_REGISTRATION_USE_SODIUM=ON。"
+        "请同时加上 -DCOURSE_REGISTRATION_USE_SODIUM=ON，或去掉 SODIUM_ROOT。")
+endif()
+
+if (COURSE_REGISTRATION_USE_SODIUM)
+    # ---- 平台与工具链 ----
+    if (NOT MSVC)
+        message(FATAL_ERROR
+            "本阶段只支持 Windows x64 + MSVC 2022 的 libsodium 动态链接；"
+            "静态链接与 Linux/GCC 均未验证，未实现。")
+    endif()
+    if (NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
+        message(FATAL_ERROR "本阶段只支持 64 位构建（-A x64），当前指针大小 "
+                            "${CMAKE_SIZEOF_VOID_P} 字节。")
+    endif()
+    if (CMAKE_VERSION VERSION_LESS 3.21)
+        message(FATAL_ERROR
+            "开启 libsodium 需要 CMake 3.21 或更新版本（依赖 TARGET_RUNTIME_DLLS 拷贝 DLL）；"
+            "当前版本 ${CMAKE_VERSION}。")
+    endif()
+    if (NOT DEFINED SODIUM_ROOT)
+        message(FATAL_ERROR
+            "本阶段请显式指定 -DSODIUM_ROOT=<官方 libsodium-*-msvc 解压目录>。")
+    endif()
+
+    # ---- 目录与头文件 ----
+    if (NOT IS_DIRECTORY "${SODIUM_ROOT}")
+        message(FATAL_ERROR "SODIUM_ROOT 不存在：${SODIUM_ROOT}")
+    endif()
+    if (NOT EXISTS "${SODIUM_ROOT}/include/sodium.h")
+        message(FATAL_ERROR
+            "SODIUM_ROOT 缺少头文件：${SODIUM_ROOT}/include/sodium.h "
+            "（应指向官方 libsodium-*-msvc.zip 的解压目录）")
+    endif()
+
+    # ---- 逐配置检查动态库（.lib 与 .dll 都要有）----
+    set(_sodium_missing "")
+    set(_sodium_static_found FALSE)
+    foreach(_cfg Debug Release)
+        set(_dir "${SODIUM_ROOT}/x64/${_cfg}/v143/dynamic")
+        foreach(_file libsodium.lib libsodium.dll)
+            if (NOT EXISTS "${_dir}/${_file}")
+                list(APPEND _sodium_missing "${_dir}/${_file}")
+            endif()
+        endforeach()
+        if (EXISTS "${SODIUM_ROOT}/x64/${_cfg}/v143/static/libsodium.lib")
+            set(_sodium_static_found TRUE)
+        endif()
+    endforeach()
+
+    if (_sodium_missing)
+        string(REPLACE ";" "\n  " _missing_text "${_sodium_missing}")
+        # 区分两种情况：动态库存在但缺文件（包不完整），与包里根本没有动态库（只有 static）。
+        set(_sodium_has_dynamic FALSE)
+        foreach(_cfg Debug Release)
+            if (EXISTS "${SODIUM_ROOT}/x64/${_cfg}/v143/dynamic/libsodium.lib")
+                set(_sodium_has_dynamic TRUE)
+            endif()
+        endforeach()
+        if (_sodium_has_dynamic)
+            message(FATAL_ERROR
+                "libsodium 动态包不完整，缺少以下文件：\n  ${_missing_text}\n"
+                "请补齐官方 libsodium-*-msvc.zip 中对应的 dynamic 文件"
+                "（x64/{Debug,Release}/v143/dynamic/libsodium.lib 与 libsodium.dll）。")
+        elseif (_sodium_static_found)
+            message(FATAL_ERROR
+                "libsodium 动态包不完整，缺少以下文件：\n  ${_missing_text}\n"
+                "检测到包内只有 static 库：本阶段只验收官方动态包（v143/dynamic），"
+                "请改用官方 libsodium-*-msvc.zip 的 dynamic 目录。")
+        else()
+            message(FATAL_ERROR
+                "libsodium 动态包不完整，缺少以下文件：\n  ${_missing_text}\n"
+                "请使用官方 libsodium-*-msvc.zip（含 x64/{Debug,Release}/v143/dynamic/"
+                "libsodium.lib 与 libsodium.dll）。")
+        endif()
+    endif()
+
+    add_library(sodium::sodium SHARED IMPORTED)
+    set_target_properties(sodium::sodium PROPERTIES
+        IMPORTED_CONFIGURATIONS "DEBUG;RELEASE"
+        IMPORTED_IMPLIB_DEBUG     "${SODIUM_ROOT}/x64/Debug/v143/dynamic/libsodium.lib"
+        IMPORTED_IMPLIB_RELEASE   "${SODIUM_ROOT}/x64/Release/v143/dynamic/libsodium.lib"
+        IMPORTED_LOCATION_DEBUG   "${SODIUM_ROOT}/x64/Debug/v143/dynamic/libsodium.dll"
+        IMPORTED_LOCATION_RELEASE "${SODIUM_ROOT}/x64/Release/v143/dynamic/libsodium.dll"
+        INTERFACE_INCLUDE_DIRECTORIES "${SODIUM_ROOT}/include")
+    set(COURSE_REGISTRATION_SODIUM_TARGET sodium::sodium)
+
+    # ---- 配置期实际链接（Debug 与 Release 各一次）----
+    file(WRITE "${CMAKE_BINARY_DIR}/sodium_probe.cpp"
+         "#include <sodium.h>\nint main() { return sodium_init() < 0 ? 1 : 0; }\n")
+    foreach(_cfg Debug Release)
+        set(CMAKE_TRY_COMPILE_CONFIGURATION ${_cfg})
+        try_compile(_sodium_link_${_cfg}
+            "${CMAKE_BINARY_DIR}/sodium_probe_${_cfg}"
+            "${CMAKE_BINARY_DIR}/sodium_probe.cpp"
+            LINK_LIBRARIES ${COURSE_REGISTRATION_SODIUM_TARGET}
+            CXX_STANDARD 17)
+        if (NOT _sodium_link_${_cfg})
+            message(FATAL_ERROR
+                "libsodium 在 ${_cfg} 配置下链接失败："
+                "${SODIUM_ROOT}/x64/${_cfg}/v143/dynamic/libsodium.lib")
+        endif()
+    endforeach()
+
+    add_executable(libsodium_probe automated_tests/libsodium_probe_tests.cpp)
+    course_registration_link_sodium(libsodium_probe)
+    add_test(NAME libsodium_probe COMMAND libsodium_probe)
+
+    message(STATUS
+        "libsodium: 官方动态包 x64/v143/dynamic（Debug/Release 文件齐全，链接检查通过）")
+endif()

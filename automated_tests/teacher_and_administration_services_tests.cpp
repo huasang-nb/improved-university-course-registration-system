@@ -1523,6 +1523,71 @@ void test_course_and_first_class_are_created_together() {
     CHECK(fixture.context.find_course(5, missing_course) == false);
 }
 
+// 已确认规则：教师停用不删除历史选退课记录、不自动退课、不清空任课关系；
+// 一致性检查、管理员查看与正常改派都不应因"教师停用、数据完整"而报错。
+// 顺序刻意是"先建立 Active 与 Dropped 记录，再停用教师"，这样只验证停用前已有的数据，
+// 不依赖"停用后还能新选该班"这种行为（该行为仍待讨论）。
+// 学生端"新一轮可选列表过滤"属待团队确认的需求，不在本测试范围内。
+void test_inactive_teacher_keeps_history_intact() {
+    Fixture fixture;
+    AdministratorService administration(fixture.context);
+    TeacherService teacher_service(fixture.context);
+
+    // 1. 教师仍在启用状态时建立历史：
+    //    教师 100 的班里一条 Dropped，另一个班一条 Active。
+    CHECK_CODE(fixture.context.registration().enroll(1001, 10),
+               ResultCode::Success);
+    CHECK_CODE(fixture.context.registration().enroll(1002, 11),
+               ResultCode::Success);
+    CHECK_CODE(fixture.context.registration().drop(1001, 10),
+               ResultCode::Success);
+
+    // 2. 之后再停用教师 100
+    CHECK_CODE(administration.update_teacher(
+                   fixture.admin,
+                   {100, "T2015007", "Dr. Wang", "Software Engineering", false}),
+               ResultCode::Success);
+
+    // 3. 班级、任课关系与记录都还在
+    TeachingClass stored{};
+    CHECK(fixture.context.find_teaching_class(10, stored));
+    CHECK(stored.teacher_id == 100);
+    int active = 0;
+    int dropped = 0;
+    for (const Enrollment& enrollment : fixture.context.all_enrollments()) {
+        if (enrollment.status == EnrollmentStatus::Active) {
+            ++active;
+        } else {
+            ++dropped;
+        }
+    }
+    CHECK(active == 1);
+    CHECK(dropped == 1);
+
+    // 4. 仅"教师停用、数据完整"不算异常
+    std::vector<std::string> problems;
+    CHECK_CODE(administration.check_data_integrity(fixture.admin, problems),
+               ResultCode::Success);
+    CHECK(problems.empty());
+
+    // 5. 管理员仍能查看该班（含停用教师信息）
+    TeachingClassSummary summary{};
+    CHECK_CODE(teacher_service.class_summary(fixture.admin, 10, summary),
+               ResultCode::Success);
+    CHECK(summary.teacher_id == 100);
+    CHECK(summary.active_enrollments == 0);
+    CHECK(summary.remaining_seats == 2);
+
+    // 6. 通过正常改派流程换给启用教师：仍然允许，改派后数据一致
+    CHECK_CODE(administration.update_teaching_class(
+                   fixture.admin, make_class(10, 1, 300, 2, 1, 540, 600, "A101")),
+               ResultCode::Success);
+    CHECK(fixture.context.find_teaching_class(10, stored));
+    CHECK(stored.teacher_id == 300);
+    CHECK_CODE(administration.check_data_integrity(fixture.admin, problems),
+               ResultCode::Success);
+}
+
 // ---------------------------------------------------------------------------
 // 一致性检查
 // ---------------------------------------------------------------------------
@@ -1655,6 +1720,7 @@ int main() {
     test_course_and_first_class_are_created_together();
     test_inactive_teacher_cannot_be_assigned();
     test_inactive_teacher_class_can_still_be_edited();
+    test_inactive_teacher_keeps_history_intact();
     test_overlapping_meetings_in_one_class_are_allowed();
     test_account_number_is_unique_across_roles();
     test_data_integrity_reports_duplicate_accounts();
