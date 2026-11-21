@@ -36,12 +36,17 @@ add_executable(teacher_and_administration_services_tests
 target_link_libraries(teacher_and_administration_services_tests PRIVATE teacher_and_administration_services)
 add_test(NAME teacher_and_administration_services COMMAND teacher_and_administration_services_tests)
 
+add_library(login_service source_code/login_service.cpp)
+target_link_libraries(login_service PUBLIC teacher_and_administration_services)
+
 if (MSVC)
     target_compile_options(course_registration_business_rules PRIVATE /W4)
     target_compile_options(teacher_and_administration_services PRIVATE /W4)
+    target_compile_options(login_service PRIVATE /W4)
 else()
     target_compile_options(course_registration_business_rules PRIVATE -Wall -Wextra)
     target_compile_options(teacher_and_administration_services PRIVATE -Wall -Wextra)
+    target_compile_options(login_service PRIVATE -Wall -Wextra)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -130,6 +135,11 @@ target_link_libraries(registration_storage_integration_tests
     PRIVATE persistent_registration_service student_query_and_timetable_services)
 add_test(NAME registration_storage_integration
     COMMAND registration_storage_integration_tests)
+
+add_executable(login_service_tests automated_tests/login_service_tests.cpp)
+target_link_libraries(login_service_tests
+    PRIVATE login_service persistent_registration_service)
+add_test(NAME login_service COMMAND login_service_tests)
 
 add_executable(registration_storage_demonstration
     source_code/registration_storage_demonstration.cpp)
