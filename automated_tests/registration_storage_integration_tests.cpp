@@ -1,3 +1,4 @@
+#include "persistent_administration_service.hpp"
 #include "persistent_registration_service.hpp"
 #include "student_query_and_timetable_services.hpp"
 
@@ -153,6 +154,116 @@ struct Fixture {
     }
     void check_views() { views(context, query, teacher); }
 };
+
+struct PublishedState {
+    std::string memory;
+    std::string primary;
+    std::string backup;
+};
+
+PublishedState capture_published_state(const Fixture& fixture) {
+    PublishedState published{state(fixture.context), read(fixture.storage.path),
+                             read(fixture.storage.path + ".bak")};
+    // 主文件与备份必须不同，否则意外保存即使轮换了备份，也可能漏检。
+    require(published.primary != published.backup,
+            "test needs distinct snapshots to detect an unexpected save");
+    return published;
+}
+
+void expect_unchanged(const SystemContext& context, const StorageOptions& storage,
+                      const PublishedState& before) {
+    require(state(context) == before.memory, "rejection changed in-memory state");
+    require(read(storage.path) == before.primary, "rejection changed the primary snapshot");
+    require(read(storage.path + ".bak") == before.backup, "rejection changed the backup");
+}
+
+void expect_single_seat_class(const StudentQueryService& query,
+                              const TeacherService& teacher, int active) {
+    SeatsView seats{};
+    code(query.view_available_seats(10, seats), ResultCode::Success);
+    require(seats.capacity == 1 && seats.active_enrollments == active &&
+                seats.remaining_seats == 1 - active,
+            "student seat view differs from expected capacity or occupancy");
+    TeachingClassSummary summary{};
+    code(teacher.class_summary(admin, 10, summary), ResultCode::Success);
+    require(summary.capacity == 1 && summary.active_enrollments == active &&
+                summary.remaining_seats == 1 - active,
+            "teacher summary differs from expected capacity or occupancy");
+}
+
+// 同一学生重发同一班的选课或退课请求时，拒绝请求且保留已保存的状态。
+void repeated_requests(const fs::path& path) {
+    Fixture f(path);
+    code(f.registration.enroll(alice, 10), ResultCode::Success);
+    const auto enrolled = capture_published_state(f);
+    code(f.registration.enroll(alice, 10), ResultCode::AlreadyEnrolled);
+    expect_unchanged(f.context, f.storage, enrolled);
+    require(f.context.all_enrollments().size() == 1 &&
+                f.context.active_enrollments(alice.user_id).size() == 1,
+            "duplicate enrollment changed the active record");
+    f.check_views();
+
+    code(f.registration.drop(alice, 10), ResultCode::Success);
+    const auto dropped = capture_published_state(f);
+    code(f.registration.drop(alice, 10), ResultCode::ActiveEnrollmentNotFound);
+    expect_unchanged(f.context, f.storage, dropped);
+    require(f.context.all_enrollments().size() == 1 &&
+                f.context.all_enrollments().front().status == EnrollmentStatus::Dropped &&
+                f.context.remaining_seats(10) == 2,
+            "duplicate drop changed history or released another seat");
+
+    // 模拟重启，确认退课历史仍保留，重发同一请求仍会被拒绝。
+    auto reloaded = make_context();
+    code(load_state(f.storage, reloaded), ResultCode::Success);
+    require(state(reloaded) == dropped.memory, "reload changed the dropped record");
+    PersistentRegistrationService registration(reloaded, f.storage);
+    code(registration.drop(alice, 10), ResultCode::ActiveEnrollmentNotFound);
+    expect_unchanged(reloaded, f.storage, dropped);
+    StudentQueryService query(reloaded);
+    TeacherService teacher(reloaded);
+    views(reloaded, query, teacher);
+}
+
+// 管理员缩容和学生选退课共用持久化状态，退出来的名额应立即可用。
+void capacity_change_and_seat_transfer(const fs::path& path) {
+    Fixture f(path);
+    PersistentAdministratorService administration(f.context, f.storage);
+    code(f.registration.enroll(alice, 10), ResultCode::Success);
+    // 容量等于当前人数时允许缩容，缩容后班级刚好满员。
+    code(administration.set_teaching_class_capacity(admin, 10, 1), ResultCode::Success);
+    expect_single_seat_class(f.query, f.teacher, 1);
+
+    const auto full = capture_published_state(f);
+    code(f.registration.enroll(bob, 10), ResultCode::TeachingClassFull);
+    expect_unchanged(f.context, f.storage, full);
+
+    code(f.registration.drop(alice, 10), ResultCode::Success);
+    expect_single_seat_class(f.query, f.teacher, 0);
+    require(f.context.all_enrollments().size() == 1 &&
+                f.context.all_enrollments().front().status == EnrollmentStatus::Dropped,
+            "seat release did not preserve the original enrollment history");
+    code(f.registration.enroll(bob, 10), ResultCode::Success);
+    expect_single_seat_class(f.query, f.teacher, 1);
+
+    const auto transferred = capture_published_state(f);
+    auto reloaded = make_context();
+    code(load_state(f.storage, reloaded), ResultCode::Success);
+    require(state(reloaded) == transferred.memory, "reload changed capacity or enrollment history");
+    require(reloaded.all_enrollments().size() == 2 &&
+                reloaded.active_enrollments(alice.user_id).empty() &&
+                reloaded.active_enrollments(bob.user_id).size() == 1 &&
+                reloaded.active_enrollments(bob.user_id).front().teaching_class_id == 10,
+            "reload did not preserve the transfer to the second student");
+    StudentQueryService query(reloaded);
+    TeacherService teacher(reloaded);
+    expect_single_seat_class(query, teacher, 1);
+    views(reloaded, query, teacher);
+    PersistentRegistrationService registration(reloaded, f.storage);
+    // Alice 的退课历史仍在，但 Bob 已占用唯一名额，Alice 重选也要过容量检查。
+    code(registration.enroll(alice, 10), ResultCode::TeachingClassFull);
+    expect_unchanged(reloaded, f.storage, transferred);
+}
+
 void passed(const char* name) {
     ++scenarios;
     std::cout << "PASS: " << name << '\n';
@@ -165,6 +276,10 @@ int main() {
         ("team4_yuhua_registration_" + std::to_string(unique));
     try {
         fs::create_directories(root);
+        repeated_requests(root / "repeated_requests.json");
+        passed("same-class enroll/drop retries preserve state and snapshots");
+        capacity_change_and_seat_transfer(root / "seat_transfer.json");
+        passed("capacity changes and seat transfers survive reload");
         {
             Fixture f(root / "roundtrip.json");
             code(f.registration.enroll(alice, 10), ResultCode::Success);

@@ -132,7 +132,8 @@ endif()
 add_executable(registration_storage_integration_tests
     automated_tests/registration_storage_integration_tests.cpp)
 target_link_libraries(registration_storage_integration_tests
-    PRIVATE persistent_registration_service student_query_and_timetable_services)
+    PRIVATE persistent_registration_service persistent_administration_service
+            student_query_and_timetable_services)
 add_test(NAME registration_storage_integration
     COMMAND registration_storage_integration_tests)
 
