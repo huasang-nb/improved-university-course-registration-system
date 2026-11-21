@@ -1,73 +1,96 @@
-# 账号开户与 libsodium 构建接入（Zhu Ziliang，2026-11-19）
+# 账号开户与 libsodium 构建接入（Zhu Ziliang）
 
-## 1. 本轮已落地的代码事实
+- 最后更新：2026-11-21
+- 状态：构建接入已实测；密码校验与凭据入口仍由 Yuhua 负责
+
+## 1. 本轮代码事实
 
 | 项 | 现状 |
 |---|---|
-| 凭据字段 | `Student` / `Teacher` / `Administrator` 各新增 `std::string password_hash`（放在结构体末尾，聚合初始化向后兼容） |
-| 资料更新 | `update_student` / `update_teacher` 只更新资料字段，**从原记录保留 `password_hash`**；调用方传空串或别的哈希都不会覆盖 |
-| 新建账号 | `create_student` / `create_teacher` **不接受**调用方给的哈希，统一清空；密码只能走后续独立入口 |
-| JSON 快照 | 三类人员都写入 `password_hash`（仅在非空时写）；读取时该字段**可选**，没有就是空串，旧快照可直接加载 |
-| 测试 | `persistent_administration_tests` 中新增凭据保护用例（见第 4 节） |
-| 未实现 | 凭据设置/重置入口、`must_change_password`、首次强制改密、激活令牌、`LoginService` 真实校验（由 Yuhua 负责） |
+| 凭据字段 | `Student` / `Teacher` / `Administrator` 末尾各有一个 `std::string password_hash{}` |
+| 快照格式 | 采用 Kai 已验收的实现：**读 v1/v2，统一写 v2**；v2 写 `password_hash`，v1 缺该字段按空串处理 |
+| 资料更新 | `update_student` / `update_teacher` 从原记录恢复 `password_hash`，只更新资料字段 |
+| 新建账号 | `create_student` / `create_teacher` 清空调用方传入的哈希；密码只能走后续独立入口 |
+| 未实现 | 凭据设置/重置入口、首次强制改密、激活令牌、`LoginService` 真实校验 |
 
-## 2. 首个管理员怎样在本地设置密码（建议）
+## 2. 首个管理员怎样设置密码（建议）
 
-不要把明文写进仓库、JSON 或脚本参数。推荐两种可接受做法：
+不要把明文写进仓库、JSON 或命令行参数。
 
-**A. 初始化脚本读一次环境变量（推荐）**
+**方案 A（推荐，不需要新增字段）**
 
-1. 管理员手动设置环境变量，例如 `TEAM4_BOOTSTRAP_ADMIN_PASSWORD`（当前会话有效）；
-2. 执行一次性初始化程序：读变量 → Argon2id 哈希 → 写入管理员记录 → **立即清空该环境变量**；
-3. 程序中不打印明文、不落日志；初始化完成后提示"密码已写入，请删除该变量"。
+1. 由**父脚本**在调用初始化程序前设置 `TEAM4_BOOTSTRAP_ADMIN_PASSWORD`；
+2. 初始化程序读取一次、Argon2id 哈希、写入管理员记录；
+3. 该变量由**设置它的父脚本负责清除**（例如父脚本在子进程退出后立即 unset），
+   初始化程序本身不打印明文、不写日志。
 
-**B. 首次启动生成一次性密码**
+**方案 B（需要 `must_change_password`）**：首次初始化生成一次性密码，只打印一次，
+首次登录强制改密。字段与流程尚未实现，范围待定。
 
-1. 首次初始化时生成随机密码，**只在控制台打印一次**；
-2. 同时置 `must_change_password = true`（该字段尚未实现，等团队定范围）；
-3. 管理员首次登录必须改密。
+## 3. 管理员新增人员如何衔接密码设置
 
-两种都可以；A 不需要改字段，B 需要 `must_change_password` 与强制改密流程，范围更大。
+创建时不写密码（已实现），账号处于"无密码 = 不可登录"。后续可选一次性密码或激活令牌，
+范围待定；无论选哪种，设置/重置都必须是独立入口，`update_*` 已不承担该职责。
 
-## 3. 管理员新增人员怎样衔接后续密码设置
+## 4. libsodium 构建接入（可选，默认关闭）
 
-现有代码已经保证"创建时不写密码"，因此新增人员处于**无密码 = 不可登录**状态。后续接法（范围待定）：
-
-- **一次性密码**：创建结果返回一次，管理员转交，首次登录强制改密；
-- **激活令牌**：创建时生成一次性 token（只存哈希、带过期），本人凭 token 设密码；
-- 在此之前，登录对空 `password_hash` 必须**明确拒绝**（提示激活/重置），不能当空密码放行。
-
-无论选哪种，**"设置/重置密码"都必须是独立入口**（本轮的 `update_*` 已不再承担这件事）。
-
-## 4. libsodium 的 CMake 接入（已准备好，默认关闭）
-
-CMakeLists 新增开关与依赖解析：
+### MSVC 2022
 
 ```powershell
-# MSVC：指向官方 libsodium-*-msvc.zip 解压目录（含 include/ 与 x64/Release/v143/static）
-cmake -S . -B build\cmake -G "Visual Studio 17 2022" -A x64 ^
-      -DCOURSE_REGISTRATION_USE_SODIUM=ON -DSODIUM_ROOT=C:\path\to\libsodium
-
-# GCC 9+：安装 libsodium-dev 后
-cmake -S . -B build -DCOURSE_REGISTRATION_USE_SODIUM=ON
+cmake -S . -B build\cmake -G "Visual Studio 17 2022" -A x64 -DCOURSE_REGISTRATION_USE_SODIUM=ON -DSODIUM_ROOT=C:\path\to\libsodium
+cmake --build build\cmake --config Release
+cmake --build build\cmake --config Debug
 ```
 
-行为：
+`SODIUM_ROOT` 指向官方 `libsodium-*-msvc.zip` 的解压目录。配置阶段会检查：
 
-- `SODIUM_ROOT` 存在时建立导入目标 `sodium::sodium`，链接静态库并定义 `SODIUM_STATIC`
-  （不定义会按 dllimport 声明，出现 `__imp_*` 未解析）；
-- 否则 `find_package(Sodium)`，找不到时给出可读报错，提示安装 `libsodium-dev` 或用 `SODIUM_ROOT`；
-- 链接目标通过变量 `${COURSE_REGISTRATION_SODIUM_TARGET}` 暴露，供后续 `LoginService` 的
-  密码哈希目标 `target_link_libraries(... ${COURSE_REGISTRATION_SODIUM_TARGET})` 使用。
+- `SODIUM_ROOT` 是否存在、`include/sodium.h` 是否存在；
+- 架构（`CMAKE_SIZEOF_VOID_P` = 8 → `x64`，4 → `Win32`）对应的库文件是否存在；
+- 用 `try_compile` **实际链接一次**，失败则直接报错，不会出现"配置成功、构建才失败"。
 
-**默认 OFF**：本分支没有任何代码使用 libsodium，打开开关不会改变现有构建；团队确认后由
-LoginService 侧接入真实校验。本机已用该包做过独立探针（Argon2id 哈希/校验通过），
-预编译包不提交到仓库。
+链接策略：
 
-## 5. 测试结果（2026-11-19）
+| 包内内容 | 行为 |
+|---|---|
+| 有 `dynamic` 目录（Debug/Release 都有） | **优先动态库**：`SHARED IMPORTED`，`IMPORTED_IMPLIB` 链接、`IMPORTED_LOCATION` 指向 DLL，构建后自动把 `libsodium.dll` 拷到可执行文件旁；不定义 `SODIUM_STATIC` |
+| 只有 `static` | 定义 `SODIUM_STATIC`，并由 `course_registration_link_sodium()` 把使用者的 `MSVC_RUNTIME_LIBRARY` 设为 `/MT`，避免 **LNK4098**（静态库用 /MT 构建，与默认 /MD 混用会冲突） |
+
+实测（2026-11-21，动态库与"仅静态库"两种包都试过）：Release / Debug 均链接通过，
+`libsodium_probe` 在两种配置下都通过，无 LNK4098。
+
+### Debian / Ubuntu
+
+`libsodium-dev` 提供 `libsodium.pc`，CMake 不附带 `FindSodium` 模块，因此本工程优先用 pkg-config：
+
+```bash
+sudo apt install libsodium-dev pkg-config
+cmake -S . -B build -DCOURSE_REGISTRATION_USE_SODIUM=ON
+cmake --build build -j
+cd build && ctest --output-on-failure
+```
+
+查找顺序：`pkg_check_modules(SODIUM IMPORTED_TARGET libsodium)` → `find_package(Sodium)` →
+报错。都找不到时的提示会说明装 `libsodium-dev`/`pkg-config` 或改用 `SODIUM_ROOT`。
+
+### 其它目标
+
+`libsodium_probe`（`automated_tests/libsodium_probe_tests.cpp`）只在开关打开时编译并注册为
+`add_test`，用 Argon2id MIN 参数做一次哈希+校验，验证"能编译、能链接、语义正确"。
+
+## 5. 规则状态（2026-11-21）
+
+| 事项 | 状态 |
+|---|---|
+| 学生可选列表过滤停用教师及其班级 | **已确认，待实现和联调** |
+| 选课入口拒绝直接提交这些班 | **已确认，待实现和联调**（Yuhua 在选课请求入口补资格检查） |
+| 原班教师停用后能否改该班时间与容量 | **仍待讨论**；现有代码允许维护（容量下限、时间冲突等检查照常） |
+| 历史选退课记录、课表、任课关系保留 | 已确认，已实现并有用例 |
+
+## 6. 测试结果（2026-11-21）
 
 | 配置 | 结果 |
 |---|---|
-| CMake Release | 5/5 通过（管理员 501 项、持久化入口 121 项） |
-| CMake Debug | 见提交说明 |
-| 反向验证 | 去掉"保留原哈希"逻辑后，凭据测试打印 6 处 FAIL 并返回 exit=1 |
+| 默认构建（不带 libsodium） | ctest 5/5：管理员 501 项、管理员持久化 134 项 |
+| `-DCOURSE_REGISTRATION_USE_SODIUM=ON` + 动态库 | ctest 6/6（Release 与 Debug） |
+| 同上但包内只有静态库 | ctest 6/6（Release 与 Debug），无 LNK4098 |
+| 传不存在的 `SODIUM_ROOT` | 配置阶段失败，报 `SODIUM_ROOT 不存在：…` |
