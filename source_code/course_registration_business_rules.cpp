@@ -5,8 +5,8 @@
 namespace course_registration {
 namespace {
 
-// 默认时钟：本机当前时间，格式 "YYYY-MM-DDTHH:MM"，与 opens_at/closes_at 同构，
-// 固定宽度可以直接按字符串比较先后。
+// 读取本机当前时间，转成与 opens_at、closes_at 相同的 "YYYY-MM-DDTHH:MM" 格式。
+// 这种格式的年月日和时分位数固定，按字符串比较就能判断时间先后。
 std::string system_now() {
     std::time_t current = std::time(nullptr);
     std::tm* local_time = std::localtime(&current);
@@ -100,19 +100,23 @@ std::vector<Enrollment> RegistrationService::active_enrollments(
 
 OperationResult RegistrationService::enroll(
     int student_id, int teaching_class_id) {
-    // 1. 只在选课开放期处理请求。按当前时间现算，不依赖保存下来的旧开关。
+    // 如果请求同时违反多条规则，返回最先检查到的错误。
+    // 下面所有检查都通过后，才会修改选课记录。
+    // 1. 按当前时间判断选课是否开放，避免时间已过但旧开关仍显示开放。
     if (!registration_open_now()) {
         return {ResultCode::RegistrationClosed, "Registration period closed"};
     }
 
-    // 2. 教学班编号来自请求，在入口查一次。课程引用由初始化数据保证有效。
+    // 2. 先查找请求中的教学班编号，找不到就返回错误。
+    // 使用本类前，需要保证每个教学班对应的课程都存在。
     const TeachingClass* requested_class = find_teaching_class(teaching_class_id);
     if (requested_class == nullptr) {
         return {ResultCode::TeachingClassNotFound, "Teaching class not found"};
     }
     const Course* requested_course = find_course(requested_class->course_id);
 
-    // 后面三个检查都使用同一批已选教学班。
+    // 收集学生当前仍在修读的教学班，后面用它们检查重复课程、时间冲突和总学分。
+    // 状态为 Dropped 的记录表示已经退课，不占用学分和上课时间。
     std::vector<const TeachingClass*> current_classes;
     for (const Enrollment& enrollment : active_enrollments(student_id)) {
         current_classes.push_back(
@@ -141,7 +145,8 @@ OperationResult RegistrationService::enroll(
         }
     }
 
-    // 5. 总学分不能超过当前规则中的上限。
+    // 5. 用 long long 计算总学分，因为多个 int 学分相加可能超过 int 能表示的范围。
+    // 如果直接用 int 相加，结果可能变成错误的数值，导致本应超学分的请求被允许。
     long long current_credits = 0;
     for (const TeachingClass* current_class : current_classes) {
         const Course* course = find_course(current_class->course_id);
@@ -152,12 +157,13 @@ OperationResult RegistrationService::enroll(
         return {ResultCode::CreditLimitExceeded, "Credit limit exceeded"};
     }
 
-    // 6. 剩余名额由容量减去有效选课人数得到，不另存一份数字。
+    // 6. 已选人数达到容量时，拒绝选课。人数只统计状态为 Active 的记录。
     if (enrollment_count(teaching_class_id) >= requested_class->capacity) {
         return {ResultCode::TeachingClassFull, "Teaching class full"};
     }
 
-    // 7. 所有检查通过后，才改动选课记录。
+    // 7. 如果这个学生以前退过这个班，就把原来的 Dropped 记录改回 Active。
+    // 这样重新选课时就不用新增一条记录。名额仍要按上面的步骤检查，因为可能已被别人选走。
     for (Enrollment& enrollment : enrollments_) {
         if (enrollment.student_id == student_id &&
             enrollment.teaching_class_id == teaching_class_id &&
@@ -174,7 +180,7 @@ OperationResult RegistrationService::enroll(
 
 OperationResult RegistrationService::drop(
     int student_id, int teaching_class_id) {
-    // 与 enroll() 使用同一个判断入口，避免两边规则不一致。
+    // 选课和退课都调用 registration_open_now，保证两种操作使用相同的开放时间规则。
     if (!registration_open_now()) {
         return {ResultCode::RegistrationClosed, "Registration period closed"};
     }
@@ -184,7 +190,8 @@ OperationResult RegistrationService::drop(
             enrollment.teaching_class_id == teaching_class_id &&
             enrollment.status == EnrollmentStatus::Active) {
             enrollment.status = EnrollmentStatus::Dropped;
-            // remaining_seats() 会据此自动增加一席。
+            // 人数和课表只统计 Active 记录。改为 Dropped 后会空出一个名额，课表也会移除该班。
+            // 记录本身保留下来，便于以后查看退课历史或重新选课。
             return {ResultCode::Success, "Drop successful"};
         }
     }
@@ -193,9 +200,9 @@ OperationResult RegistrationService::drop(
 }
 
 // ============================================================================
-// [Zhu Ziliang 追加，待 Zhang Yuhua 复核] 教师/管理员模块需要的只读接口与
-// 受控写入。这里只读取或替换目录与规则，不触碰 enrollments_，因此 enroll()
-// 的检查顺序、名额计算方式和已有选课记录都保持原样。
+// [Zhu Ziliang 追加，待 Zhang Yuhua 复核] 下面的方法供教师和管理员模块使用。
+// 查询方法返回当前保存的数据。修改方法由管理员检查通过后调用，用于替换课程、教学班或规则。
+// 这些修改方法保留已有的选退课记录，选课时仍然按上面的检查顺序判断是否允许操作。
 // ============================================================================
 
 std::vector<Enrollment> RegistrationService::all_enrollments() const {
@@ -225,8 +232,8 @@ void RegistrationService::apply_rule_change(const RegistrationRule& rule) {
     rule_ = rule;
 }
 
-// [Zhang Yikai 追加，待 Zhang Yuhua 复核] 持久化恢复：直接替换原始记录，
-// 不重放 enroll() 的业务检查。调用方（persistence 层）在载入前已完成校验。
+// [Zhang Yikai 追加，待 Zhang Yuhua 复核] 读取文件时，把保存的选课记录放回内存。
+// 这里直接替换记录，由存储代码检查整份数据。避免因当前已过选课时间而无法恢复历史记录。
 void RegistrationService::restore_enrollments(
     std::vector<Enrollment> enrollments) {
     enrollments_ = std::move(enrollments);

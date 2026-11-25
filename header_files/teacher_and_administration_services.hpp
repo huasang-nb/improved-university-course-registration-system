@@ -29,8 +29,9 @@ namespace course_registration {
 enum class Role { Student, Teacher, Administrator };
 
 // 登录成功后（Zhang Yuhua 的登录模块）交给本模块的身份标识。
-// user_id 与 Student::student_id、Teacher::teacher_id、
-// Administrator::administrator_id 使用同一套编号，便于与 Enrollment 对齐。
+// role 表示用户的角色，决定用 user_id 查找学生、教师还是管理员。
+// 不同角色可以使用相同的数字 ID，所以查找时必须同时看角色和编号。
+// 对学生来说，user_id 就是选课记录中的 student_id。操作时还会核对 account_number 是否与当前账号一致。
 struct UserIdentity {
     int user_id;
     std::string account_number;
@@ -42,9 +43,10 @@ struct Student {
     std::string student_number;  // 学号，对外唯一标识
     std::string name;
     std::string major;
-    bool account_active;         // 停用账号不得选课，由登录模块拦截
-    // Argon2id PHC 字符串；空 = 未设置密码（不能密码登录）。持久化只做透明存储。
-    // 只由凭据入口写入；资料更新入口必须保留原值，不能因调用方传空串就清掉。
+    bool account_active;         // false 表示账号已停用，登录和保存选退课的代码都会检查它
+    // 保存用 Argon2id 算法计算得到的密码哈希。空字符串表示还没有可用于登录的密码。
+    // 读写 JSON 文件时保留这个字符串的原始内容，设置或修改密码由专门的代码负责。
+    // 只修改姓名、专业等资料时，应保留原来的哈希，避免请求中没填密码就把已有密码清掉。
     std::string password_hash{};
 };
 
