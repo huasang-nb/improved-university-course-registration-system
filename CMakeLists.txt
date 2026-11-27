@@ -181,7 +181,8 @@ add_test(NAME shared_persistence_acceptance COMMAND shared_persistence_acceptanc
 add_library(student_interface
     source_code/student_interface.cpp)
 target_link_libraries(student_interface
-    PUBLIC persistent_registration_service student_query_and_timetable_services)
+    PUBLIC persistent_registration_service student_query_and_timetable_services
+           login_service)
 target_include_directories(student_interface PUBLIC header_files)
 if(MSVC)
     target_compile_options(student_interface PRIVATE /W4)
@@ -197,6 +198,18 @@ add_executable(student_interface_tests
     automated_tests/student_interface_tests.cpp)
 target_link_libraries(student_interface_tests PRIVATE student_interface)
 add_test(NAME student_interface COMMAND student_interface_tests)
+
+# Zhang Yikai：第 4 周空结果、空课表与存储一致性测试。
+add_executable(student_empty_and_storage_tests
+    automated_tests/student_empty_and_storage_tests.cpp)
+target_link_libraries(student_empty_and_storage_tests PRIVATE student_interface)
+add_test(NAME student_empty_and_storage
+         COMMAND student_empty_and_storage_tests)
+
+# Zhang Yikai：第 5 周学生流程集成演示（统一认证 + 选退课 + 持久化）。
+add_executable(student_flow_demonstration
+    source_code/student_flow_demonstration.cpp)
+target_link_libraries(student_flow_demonstration PRIVATE student_interface)
 
 # ---------------------------------------------------------------------------
 # [Zhu Ziliang 追加] 可选依赖：libsodium（Argon2id 密码哈希），默认关闭。

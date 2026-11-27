@@ -246,6 +246,44 @@ int main() {
         CHECK(ui4.timetable(table).code == ResultCode::Success);
     }
 
+    // ==================================================================
+    // 25. 统一认证入口：账号 + 密码登录学生端。
+    // ==================================================================
+    {
+        SystemContext state = make_seed_context();
+        StudentInterface login_ui(state, options);
+        LoginService login_service(
+            state, [](const UserIdentity&, std::string_view password) {
+                return password == "secret";
+            });
+
+        // 密码错误 → 拒绝且未登录
+        CHECK(login_ui.login(login_service, "S2023001", "wrong").code ==
+              ResultCode::PermissionDenied);
+        CHECK(login_ui.logged_in() == false);
+
+        // 正确密码 → 学生身份；课表可读
+        CHECK(login_ui.login(login_service, "S2023001", "secret").code ==
+              ResultCode::Success);
+        CHECK(login_ui.logged_in() == true);
+        CHECK(login_ui.identity().role == Role::Student);
+        std::vector<TimetableEntry> table;
+        CHECK(login_ui.timetable(table).code == ResultCode::Success);
+
+        // 教师账号即使密码正确，也不能登录学生端，且回到未登录
+        CHECK(login_ui.login(login_service, "T2015007", "secret").code ==
+              ResultCode::PermissionDenied);
+        CHECK(login_ui.logged_in() == false);
+
+        // 停用学生 → 拒绝
+        Student disabled = state.students()[1];
+        disabled.account_active = false;
+        state.apply_student_change(disabled);
+        CHECK(login_ui.login(login_service, "S2023002", "secret").code ==
+              ResultCode::PermissionDenied);
+        CHECK(login_ui.logged_in() == false);
+    }
+
     if (g_failures != 0) {
         std::cerr << "FAILED: " << g_failures << " check(s)\n";
         return 1;

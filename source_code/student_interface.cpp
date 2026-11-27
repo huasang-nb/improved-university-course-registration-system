@@ -33,6 +33,24 @@ OperationResult StudentInterface::login(const std::string& account_number) {
             "logged in as " + student->student_number};
 }
 
+OperationResult StudentInterface::login(LoginService& login_service,
+                                        const std::string& account_number,
+                                        std::string_view password) {
+    // 统一认证入口：失败（含密码错误、账号停用、非学生角色）都回到未登录。
+    logout();
+    const LoginResult result = login_service.login(account_number, password);
+    if (result.result.code != ResultCode::Success || !result.identity) {
+        return result.result;
+    }
+    if (result.identity->role != Role::Student) {
+        return {ResultCode::PermissionDenied, "not a student account"};
+    }
+    identity_ = *result.identity;
+    logged_in_ = true;
+    return {ResultCode::Success,
+            "logged in as " + identity_.account_number};
+}
+
 void StudentInterface::logout() {
     identity_ = UserIdentity{};
     logged_in_ = false;

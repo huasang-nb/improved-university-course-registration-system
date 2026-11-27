@@ -76,6 +76,7 @@ $targets = @(
                     "source_code/student_query_and_timetable_services.cpp",
                     "source_code/persistence_service.cpp",
                     "source_code/persistent_registration_service.cpp",
+                    "source_code/login_service.cpp",
                     "source_code/student_interface.cpp",
                     "source_code/student_interface_demonstration.cpp")
         Extra = @("-lstdc++fs")
@@ -87,8 +88,43 @@ $targets = @(
                     "source_code/student_query_and_timetable_services.cpp",
                     "source_code/persistence_service.cpp",
                     "source_code/persistent_registration_service.cpp",
+                    "source_code/login_service.cpp",
                     "source_code/student_interface.cpp",
                     "automated_tests/student_interface_tests.cpp")
+        Extra = @("-lstdc++fs")
+    },
+    @{
+        Name = "student_empty_storage_tests"
+        Sources = @("source_code/course_registration_business_rules.cpp",
+                    "source_code/teacher_and_administration_services.cpp",
+                    "source_code/student_query_and_timetable_services.cpp",
+                    "source_code/persistence_service.cpp",
+                    "source_code/persistent_registration_service.cpp",
+                    "source_code/login_service.cpp",
+                    "source_code/student_interface.cpp",
+                    "automated_tests/student_empty_and_storage_tests.cpp")
+        Extra = @("-lstdc++fs")
+    },
+    @{
+        Name = "student_flow_demonstration"
+        Sources = @("source_code/course_registration_business_rules.cpp",
+                    "source_code/teacher_and_administration_services.cpp",
+                    "source_code/student_query_and_timetable_services.cpp",
+                    "source_code/persistence_service.cpp",
+                    "source_code/persistent_registration_service.cpp",
+                    "source_code/login_service.cpp",
+                    "source_code/student_interface.cpp",
+                    "source_code/student_flow_demonstration.cpp")
+        Extra = @("-lstdc++fs")
+    },
+    @{
+        Name = "login_service_tests"
+        Sources = @("source_code/course_registration_business_rules.cpp",
+                    "source_code/teacher_and_administration_services.cpp",
+                    "source_code/persistence_service.cpp",
+                    "source_code/persistent_registration_service.cpp",
+                    "source_code/login_service.cpp",
+                    "automated_tests/login_service_tests.cpp")
         Extra = @("-lstdc++fs")
     }
 )
@@ -113,7 +149,9 @@ $tests = @("course_registration_business_rules_tests",
            "student_query_and_timetable_tests",
            "persistence_tests",
            "persistent_administration_tests",
-           "student_interface_tests")
+           "login_service_tests",
+           "student_interface_tests",
+           "student_empty_storage_tests")
 foreach ($test in $tests) {
     $exe = Join-Path $build ($test + ".exe")
     if (-not (Test-Path $exe)) { continue }
