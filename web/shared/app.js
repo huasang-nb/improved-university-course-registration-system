@@ -201,11 +201,109 @@
       : '<span class="badge off">停用</span>';
   }
 
+  // “修改我的密码”：与登录同一套公共接口（由组长骨架提供）。
+  // 契约：PUT /api/auth/password {current_password, new_password}，
+  // 成功 200；当前密码错误 400 InvalidInput；未登录/会话失效 401。
+  // 接口尚未上线时（404/501）明确提示“未接入”，不做本地假成功。
+  function openPasswordDialog() {
+    const backdrop = document.createElement("div");
+    backdrop.className = "modal-backdrop";
+    backdrop.innerHTML =
+      '<div class="modal" role="dialog" aria-modal="true" aria-labelledby="pw-title">' +
+      '<h3 id="pw-title">修改我的密码</h3>' +
+      '<div class="form-row">' +
+      '<label class="field">当前密码<input id="pw-current" type="password" autocomplete="current-password"></label>' +
+      '<label class="field">新密码<input id="pw-new" type="password" autocomplete="new-password"></label>' +
+      '<label class="field">确认新密码<input id="pw-confirm" type="password" autocomplete="new-password"></label>' +
+      "</div>" +
+      '<p class="hint">新密码至少 8 位；服务器校验当前密码后保存新哈希。</p>' +
+      '<div class="form-actions">' +
+      '<button type="button" class="secondary" data-act="cancel">取消</button>' +
+      '<button type="button" data-act="submit">保存</button>' +
+      "</div>" +
+      "</div>";
+
+    function close() {
+      backdrop.remove();
+      document.removeEventListener("keydown", onKeydown);
+    }
+
+    function onKeydown(event) {
+      if (event.key === "Escape") {
+        close();
+      }
+    }
+
+    async function submit() {
+      const current = backdrop.querySelector("#pw-current").value;
+      const next = backdrop.querySelector("#pw-new").value;
+      const confirm = backdrop.querySelector("#pw-confirm").value;
+      if (!current || !next) {
+        toast("请填写当前密码与新密码", true);
+        return;
+      }
+      if (next !== confirm) {
+        toast("两次输入的新密码不一致", true);
+        return;
+      }
+      if (next.length < 8) {
+        toast("新密码至少 8 位", true);
+        return;
+      }
+      try {
+        await api.put("/api/auth/password", {
+          current_password: current,
+          new_password: next,
+        });
+        close();
+        toast("密码已修改");
+      } catch (error) {
+        if (
+          error.status === 404 ||
+          error.status === 501 ||
+          error.code === "NotImplemented"
+        ) {
+          toast("改密接口尚未接入：等组长的公共骨架上线后自动生效", true);
+          return;
+        }
+        report(error);
+      }
+    }
+
+    backdrop.addEventListener("click", (event) => {
+      if (event.target === backdrop) {
+        close();
+      }
+    });
+    backdrop.querySelector('[data-act="cancel"]').addEventListener("click", close);
+    backdrop.querySelector('[data-act="submit"]').addEventListener("click", submit);
+    document.addEventListener("keydown", onKeydown);
+    document.body.appendChild(backdrop);
+    backdrop.querySelector("#pw-current").focus();
+  }
+
+  // 页面只要放一个 id="change-password" 的按钮，就会自动挂上入口。
+  function installPasswordEntry() {
+    const button = document.getElementById("change-password");
+    if (!button) {
+      return;
+    }
+    button.addEventListener("click", openPasswordDialog);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", installPasswordEntry);
+  } else {
+    installPasswordEntry();
+  }
+
   window.Team4 = {
     api,
     esc,
     toast,
     report,
+    openPasswordDialog,
+    installPasswordEntry,
     meetingRow,
     collectMeetings,
     meetingsText,

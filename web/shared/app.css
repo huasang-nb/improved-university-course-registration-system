@@ -103,3 +103,51 @@ td.actions button { padding: 4px 9px; font-size: 13px; }
 #toast div.error { background: var(--danger); }
 
 .empty { padding: 14px; color: var(--muted); }
+
+
+/* 修改本人密码：与登录、会话同一套公共接口，页面只负责收集输入。 */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.modal {
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 20px 22px;
+  width: min(420px, 90vw);
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
+}
+
+.modal h3 {
+  margin: 0 0 14px;
+  font-size: 16px;
+}
+
+.modal .form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.modal .form-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.modal .hint {
+  margin: 10px 0 0;
+}
+
+.modal .form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}

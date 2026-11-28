@@ -135,7 +135,91 @@ register_teacher_admin_routes(server, services,
   - 教师：`GET /api/teacher/classes` 200 只含本人班；`GET /classes/20/roster`
     403 `PermissionDenied`；管理员身份访问教师路由 403。
 
-## 8. 已知限制
+## 8. 修改我的密码（入口已预留）
+
+密码的初始化、校验与改密由 Zhu Ziliang 负责的公共接口提供，三个角色共用一套流程；
+教师页与管理员页只预留入口，不自行保存任何密码。
+
+- 页面位置：`web/teacher.html`、`web/admin.html` 顶栏的“修改我的密码”按钮，
+  打开 `web/shared/app.js` 里的同一个弹窗（当前密码、新密码、确认新密码）。
+- 调用契约：`PUT /api/auth/password`，正文
+  `{"current_password": "...", "new_password": "..."}`。
+  成功 200；当前密码错误 400 `InvalidInput`；未登录或会话失效 401；
+  新密码过短等规则由服务端判定并返回 400。
+- 前端只做三项本地校验：必填、两次新密码一致、新密码至少 8 位；
+  其余规则以服务端返回为准。
+- 公共接口尚未上线时（404/501），页面提示“改密接口尚未接入”，不会假装保存成功。
+- 未做（另一项确认）：管理员替学生/教师重置忘记的密码、是否强制首次登录改密；
+  管理员人员列表里的“重置他人密码”按钮保持缺席。
+
+## 9. 与 session 骨架对接（按 Yuhua 的声明草案）
+
+Yuhua 的草案提供五组入口：`require_session()`、`require_csrf()`、`with_business_lock()`、
+`LockedServices`、`write_result()`。本模块按下面的方式接：
+
+- `dispatch()` 不再自己加锁，调用方必须已持锁（`dispatch_locked()` 仅供独立服务器与自测）。
+- 会话/CSRF 失败直接交给 `write_result()`，用 `ResultSource` 区分 401 与 403：
+  `Session` → 401，`Csrf` → 403 `CsrfRejected`，`Permission` → 403 `PermissionDenied`，
+  `Business` → `status_for()`。
+- 锁内再查一次身份由 `with_business_lock()` 负责；本模块 `require_role()` 里的重查保留为兜底。
+- 响应数据逐字段挑选（`student_json`/`teacher_json` 等），即使拿到含哈希的
+  `context_snapshot()` 也不会整对象输出。
+
+适配代码（替换 `register_teacher_admin_routes` 的两个参数重载）：
+
+```cpp
+void register_teacher_admin_routes(httplib::Server& server, Services& services) {
+    const auto handler = [&services](const httplib::Request& raw, httplib::Response& out) {
+        const SessionCheck session = require_session(raw);
+        if (!session.identity) {
+            write_result(out, session.result, ResultSource::Session);   // 401
+            return;
+        }
+        const bool write = raw.method != "GET";
+        if (write) {
+            const OperationResult csrf = require_csrf(raw);
+            if (csrf.code != ResultCode::Success) {
+                write_result(out, csrf, ResultSource::Csrf);            // 403 CsrfRejected
+                return;
+            }
+        }
+        http::Request request = to_request(raw);
+        request.identity = session.identity;
+        request.csrf_ok = write;
+
+        const Role role = request.path.rfind("/api/admin/", 0) == 0
+                              ? Role::Administrator
+                              : Role::Teacher;
+        http::Response result;
+        const OperationResult locked = with_business_lock(
+            *session.identity, role,
+            [&](LockedServices&) { result = http::dispatch(request, services); });
+        if (locked.code != ResultCode::Success) {
+            write_result(out, locked, ResultSource::Permission);        // 403
+            return;
+        }
+        out.status = result.status;
+        out.set_content(result.body, "application/json; charset=utf-8");
+    };
+
+    server.Get(R"(/api/(teacher|admin)/.*)", handler);
+    server.Post(R"(/api/(teacher|admin)/.*)", handler);
+    server.Put(R"(/api/(teacher|admin)/.*)", handler);
+    server.Patch(R"(/api/(teacher|admin)/.*)", handler);
+    server.Delete(R"(/api/(teacher|admin)/.*)", handler);
+}
+```
+
+需要 Yuhua 明确的点：
+
+1. `session` 的头文件名与实现文件（我这边按 `session.hpp` 预留 include）。
+2. `with_business_lock()` 的 `fn` 返回类型：上面按“返回 `void`、结果通过捕获写回”使用；
+   若 `fn` 需要返回 `OperationResult`，我可以改成直接返回 `result`。
+3. `require_session()` 是否顺带续期空闲时间（30 分钟口径需要在这里落实）。
+4. `LockedServices` 是否也需要暴露“当前 `SystemContext&` 的只读引用”；
+   当前我用外部 `Services&` 指向真实对象，`context_snapshot()` 只在需要完全隔离的读路径使用。
+
+## 10. 已知限制
 
 - 未接入登录：会话身份、CSRF 令牌、登录页与启动参数由组长骨架提供。
 - 学生端页面与选退课接口不在本模块（Kai / Yuhua）。

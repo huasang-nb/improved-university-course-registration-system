@@ -53,7 +53,7 @@ void register_teacher_admin_routes(httplib::Server& server, Services& services,
     const auto handler = [&services, lookup = std::move(lookup)](const httplib::Request& request,
                                                                  httplib::Response& response) {
         const SessionView session = lookup ? lookup(request) : SessionView{};
-        const Response result = dispatch(to_request(request, session), services);
+        const Response result = dispatch_locked(to_request(request, session), services);
         write_response(result, response);
     };
 

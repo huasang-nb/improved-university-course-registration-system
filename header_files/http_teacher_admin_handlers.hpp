@@ -17,9 +17,14 @@
 namespace course_registration {
 namespace http {
 
-// 分发一次请求。内部持有业务锁，覆盖身份核对、业务调用与保存。
+// 分发一次请求。调用方必须已经持有共同业务锁：
+// 会话骨架用 with_business_lock() 持锁后调用它，“身份核对 + 业务 + 保存”同处一个临界区。
 // 未匹配到路由时返回 404 RecordNotFound。
 Response dispatch(const Request& request, Services& services);
+
+// 自带加锁的便捷入口，只给独立服务器与本模块自测使用；
+// 接入组长会话骨架后不要用它，否则会和 with_business_lock() 重复加锁。
+Response dispatch_locked(const Request& request, Services& services);
 
 }  // namespace http
 }  // namespace course_registration

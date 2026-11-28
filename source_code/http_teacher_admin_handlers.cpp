@@ -1029,9 +1029,8 @@ const char* name_for(ResultCode code) {
 }
 
 Response dispatch(const Request& request, Services& services) {
-    // 一把业务锁覆盖身份核对、业务调用与保存（团队总手册第三节）。
-    std::lock_guard<std::mutex> guard(services.business_mutex);
-
+    // 调用方必须已持有共同业务锁：会话骨架用 with_business_lock() 取得锁后，
+    // 才在锁内核对身份并调用本函数（这样“身份核对 + 业务 + 保存”在同一临界区）。
     static const std::vector<std::pair<Route, std::regex>> routes = {
         {{"GET", R"(^/api/teacher/classes$)", handle_teacher_classes},
          std::regex(R"(^/api/teacher/classes$)")},
@@ -1099,6 +1098,13 @@ Response dispatch(const Request& request, Services& services) {
         return route.handler(request, services, params);
     }
     return not_found(request);
+}
+
+Response dispatch_locked(const Request& request, Services& services) {
+    // 独立服务器/测试用的简单入口：先拿本模块这一把锁，再走 dispatch。
+    // 接入组长的会话骨架后，改由 with_business_lock() 持锁并直接调用 dispatch()。
+    std::lock_guard<std::mutex> guard(services.business_mutex);
+    return dispatch(request, services);
 }
 
 }  // namespace http
