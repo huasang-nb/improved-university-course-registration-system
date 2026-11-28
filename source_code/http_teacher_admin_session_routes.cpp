@@ -9,7 +9,10 @@
 //     with_business_lock()；
 //   - 本文件不自行加锁，因此调用 dispatch()（而不是 dispatch_locked()），
 //     避免同一把锁被重复获取；
-//   - 401 / 403 的区分来自 ResultSource：会话失败 401，角色不符 403。
+//   - 401 / 403 的区分来自 ResultSource：会话失败或锁内身份失效 401，角色不符 403，
+//     存储失败 500 保留 Storage* 码，其余内部失败 500 InternalError。
+//   - 本文件只注册 /api/teacher/* 与 /api/admin/*。统一认证路由（/api/auth/*）
+//     由 SessionRuntime::register_auth_routes() 注册一次，这里不重复注册。
 // ============================================================================
 
 #include "session.hpp"
@@ -18,8 +21,9 @@
 
 #include <mutex>
 
-#include "http_teacher_admin_handlers.hpp"
+#include "http_teacher_admin_handlers.hpp"  // public_result()：过滤内部路径
 #include "http_teacher_admin_routes.hpp"
+#include "http_teacher_admin_session_routes.hpp"
 #include "http_support.hpp"
 
 namespace course_registration {
@@ -52,6 +56,23 @@ bool is_write_method(const std::string& method) {
 }
 
 }  // namespace
+
+ResultSource result_source_for(ResultCode code) {
+    switch (code) {
+        case ResultCode::AuthenticationRequired:
+            return ResultSource::Session;
+        case ResultCode::PermissionDenied:
+            return ResultSource::Permission;
+        case ResultCode::StorageIoError:
+        case ResultCode::StorageParseError:
+        case ResultCode::StorageSchemaMismatch:
+        case ResultCode::StorageIntegrityError:
+        case ResultCode::StorageBackupMissing:
+            return ResultSource::Business;
+        default:
+            return ResultSource::Internal;
+    }
+}
 
 void register_teacher_admin_routes_with_session(httplib::Server& server) {
     const auto handler = [](const httplib::Request& raw, httplib::Response& out) {
@@ -88,22 +109,13 @@ void register_teacher_admin_routes_with_session(httplib::Server& server) {
             });
 
         if (locked.code != ResultCode::Success) {
-            // 复核失败不一律当 401（2026-11-28 对齐）：
-            //   角色不符            -> 403 PermissionDenied
-            //   存储/内部异常        -> 500（InternalError 或原 Storage* 码）
-            // 会话本身在进入临界区前已由 require_session() 检查过；若锁内发现身份失效，
-            // 由公共层给出可区分的错误码后再补一支 401，这里不猜测。
-            ResultSource source = ResultSource::Internal;
-            if (locked.code == ResultCode::PermissionDenied) {
-                source = ResultSource::Permission;
-            } else if (locked.code == ResultCode::StorageIoError ||
-                       locked.code == ResultCode::StorageParseError ||
-                       locked.code == ResultCode::StorageSchemaMismatch ||
-                       locked.code == ResultCode::StorageIntegrityError ||
-                       locked.code == ResultCode::StorageBackupMissing) {
-                source = ResultSource::Business;  // 保留实际 Storage* 错误码
-            }
-            write_result(out, locked, source);
+            // 锁内复核失败必须分开处理，不能只按“是不是 PermissionDenied”二元判断：
+            //   AuthenticationRequired -> 401（会话在拿锁前还有效，进锁后账号被停用/删除/改号）
+            //   PermissionDenied       -> 403（角色不符）
+            //   Storage*               -> 500 且保留实际错误码（保存/读取失败）
+            //   其他                    -> 500 InternalError（无法识别，不伪装成会话失效）
+            // 业务本身的 400/404/409 不在这一步，它们在 callback 内已经写进 response。
+            write_result(out, public_result(locked), result_source_for(locked.code));
             return;
         }
 

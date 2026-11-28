@@ -103,12 +103,29 @@
 
   const WEEKDAYS = ["", "周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 
+  // 角色只用于顶栏展示：公共 /api/auth/me 的 user 只有 role/user_id/account_number。
+  function roleText(role) {
+    if (role === "Administrator") {
+      return "管理员";
+    }
+    if (role === "Teacher") {
+      return "教师";
+    }
+    if (role === "Student") {
+      return "学生";
+    }
+    return role || "未知角色";
+  }
+
   function minuteText(minute) {
     const h = Math.floor(minute / 60);
     const m = minute % 60;
     return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
   }
 
+  // 输出契约：返回的字符串已经做过 HTML 转义，可以直接放进 innerHTML。
+  // 教室名由管理员自由填写，原样插入会变成标签甚至脚本，所以这里统一转义；
+  // 放进 textContent 的地方会显示转义后的实体，属于可接受的取舍，不要重复转义。
   function meetingText(meeting) {
     return (
       WEEKDAYS[meeting.day_of_week] +
@@ -116,7 +133,7 @@
       minuteText(meeting.start_minute) +
       "–" +
       minuteText(meeting.end_minute) +
-      (meeting.room ? " " + meeting.room : "")
+      (meeting.room ? " " + esc(meeting.room) : "")
     );
   }
 
@@ -247,7 +264,7 @@
       '<label class="field">新密码<input id="pw-new" type="password" autocomplete="new-password"></label>' +
       '<label class="field">确认新密码<input id="pw-confirm" type="password" autocomplete="new-password"></label>' +
       "</div>" +
-      '<p class="hint">新密码至少 8 位，且必须同时包含大写字母、小写字母和数字；'
+      '<p class="hint">新密码至少 8 位，且必须同时包含大写字母、小写字母和数字；' +
       '只能使用英文字母、数字和英文半角符号，不能包含空格或中文。服务器会再次校验。</p>' +
       '<div class="form-actions">' +
       '<button type="button" class="secondary" data-act="cancel">取消</button>' +
@@ -336,6 +353,7 @@
   window.Team4 = {
     api,
     esc,
+    roleText,
     toast,
     report,
     openPasswordDialog,

@@ -105,6 +105,27 @@ register_teacher_admin_routes(server, services,
 
 ## 6. 本地联调
 
+### 6.1 正式会话服务器（推荐用于复核）
+
+`http_team4_web_server` 与公共 `SessionRuntime` 在同一个进程里，使用真实登录、Cookie 与 CSRF：
+
+```powershell
+# 1) 先给账号设初始密码（libsodium 动态包目录见文档第 2 节）
+.\build\cmake-team4\Debug\password_setup.exe --state data\team4-state.json --account A2020001
+
+# 2) 启动正式服务器（state 文件必须已存在，服务器不会替你创建）
+.\build\cmake-team4\Debug\http_team4_web_server.exe `
+    --host 127.0.0.1 --port 8080 --state data\team4-state.json --web-root web
+```
+
+打开 `http://127.0.0.1:8080/` 会用用户名或密码登录，再按角色进入 `/admin.html` 或
+`/teacher.html`。容器里 `f` 与 `--state` 一起决定了数据文件，测试请用独立文件与虚构账号。
+
+### 6.2 无会话的业务联调服务器（仅开发用）
+
+`http_teacher_admin_dev_server` 按命令行指定身份并跳过真实认证，只用于快速检查业务：
+
+
 ```powershell
 # 管理员（默认 http://127.0.0.1:8080/）
 .\build\cmake-http\Debug\http_teacher_admin_dev_server.exe --role admin --id 900
@@ -201,37 +222,73 @@ register_teacher_admin_routes(server, services,
 - 会话口径：空闲 30 分钟、登录后最长 8 小时；只有通过身份检查的 API 请求才刷新空闲时间，
   静态页面与图片不续期，最长时限从登录成功起算。
 
-接入代码的核心部分：
+正式适配器的写法（`source_code/http_teacher_admin_session_routes.cpp`）：
 
 ```cpp
+// 1) 会话：无 Cookie、过期、账号停用/改号都由公共层判定，失败即 401。
 const SessionCheck session = require_session(raw);
-if (!session.identity) { write_result(out, session.result, ResultSource::Session); return; }  // 401
+if (!session.identity) { write_result(out, session.result, ResultSource::Session); return; }
+
+// 2) CSRF：只对写方法检查，失败 403 CsrfRejected。
 if (is_write_method(raw.method)) {
     const OperationResult csrf = require_csrf(raw);
-    if (csrf.code != ResultCode::Success) { write_result(out, csrf, ResultSource::Csrf); return; }  // 403
+    if (csrf.code != ResultCode::Success) { write_result(out, csrf, ResultSource::Csrf); return; }
 }
+
+// 3) 业务：公共层持锁后回调，回调里调用 dispatch()，不调用 dispatch_locked()。
 http::Response response;
 const OperationResult locked = with_business_lock(*session.identity, role_for_path(raw.path),
     [&](LockedServices& locked) {
-        std::mutex unused;
-        Services services{locked.context(), locked.admin_service(), locked.teacher_service(), unused};
-        response = dispatch(request, services);
+        Services services{locked.context(), locked.admin_service(), locked.teacher_service()};
+        response = dispatch(to_request(raw), services);
     });
+
+// 4) 锁内身份失效/存储失败/内部异常按来源映射，不能一律当成 401。
 if (locked.code != ResultCode::Success) {
-    const ResultSource source = locked.code == ResultCode::PermissionDenied
-                                    ? ResultSource::Permission     // 403
-                                    : ResultSource::Session;       // 401
-    write_result(out, locked, source);
+    write_result(out, public_result(locked), result_source_for(locked.code));
     return;
 }
+write_response(out, response);
 ```
 
-对现有代码的影响只有一处：`http::Services::context` 从 `SystemContext&` 改成 `const SystemContext&`，
-handler 只读、写操作一律走服务，编译期就能阻止绕过持久化网关的写入。
+`Services` 里已经没有 `std::mutex&` 成员：锁由公共层持有，handler 若再拿一把锁就是重复加锁。
+`result_source_for()` 的映射（`header_files/http_teacher_admin_session_routes.hpp`）：
 
-## 10. 已知限制
+| `ResultCode` | `ResultSource` | HTTP |
+|---|---|---|
+| `AuthenticationRequired` | `Session` | 401 |
+| `PermissionDenied` | `Permission` | 403 |
+| 五个 `Storage*` | `Business` | 500，保留错误码 |
+| 其它 | `Internal` | 500 `InternalError` |
 
-- 未接入登录：会话身份、CSRF 令牌、登录页与启动参数由组长骨架提供。
+## 10. 复核后的修改（2026-11-29）
+
+按组长 2026-11-28 的复核意见改了六处，全部有测试或脚本覆盖：
+
+1. **改密弹窗打不开**：`web/shared/app.js` 的 `backdrop.innerHTML` 少写了一个 `+`，
+   页面只收到提示文字前半段，保存/取消按钮没生成。已补上，并新增
+   `web/tests/app_text_test.js`：把模板表达式取出来实际求值，断言三个输入框与两个按钮都在。
+2. **教室名被当成 HTML**：`meetingText()`/`meetingsText()` 的输出契约改为“已转义、可直接放进
+   `innerHTML`”，`room` 统一过 `esc()`；管理员教学班列表、教师教学班列表、教师班级详情三处都走
+   这两个函数。测试用 `<b>TestRoom</b>`、`A&B "x" > y` 等字符串断言不出现裸标签。
+3. **锁内身份失效返回 500**：公共层在锁内复核身份失败时回 `AuthenticationRequired`，
+   适配器现在映射成 401；只有无法识别的失败才落到 `InternalError`（500）。
+4. **保存失败泄露路径**：`public_result()` 把五个 `Storage*` 的 message 换成
+   “storage failure: nothing was changed; check the state file and retry”，错误码不变；
+   `from_result()` 与正式适配器写回都经过它。测试独占主文件后断言响应不含 `state.json`/`C:`。
+5. **重复 JSON 字段**：`body_to_object()` 用 `json::parse` 回调按层查重，
+   `{"capacity":0,"capacity":2}` 返回 400 `InvalidInput`，不执行业务、不保存。
+   注意清的是 `depth + 1` 这一层：键事件比对象开始深一层，清错层会把上一个对象的键留下，
+   正常请求（`course.course_id` 与 `first_teaching_class.course_id`）就会被误判。
+6. **顶栏不假定 `name`**：`/api/auth/me` 的 user 只有 `role`/`user_id`/`account_number`，
+   顶栏改为 `roleText(role) + 账号 + （用户编号 id）`。
+
+## 11. 已知限制
+
+- 学生端路由与选退课不在本模块；正式服务器只为教师与管理员页面提供入口，
+  学生登录后页面会提示“学生页面尚未接入这个服务器”。
+- 改密弹窗已接 `PUT /api/auth/password`，但界面行为只做了脚本级回归（模板、规则、错误提示），
+  真实浏览器里的回车键、焦点顺序未做自动化验证。
 - 学生端页面与选退课接口不在本模块（Kai / Yuhua）。
 - 管理员账号维护页未做（手册列为待确认范围），当前只维护学生与教师资料。
 - 停用教师的口径已确认（列表隐藏 + 直接提交班号拒绝，两者必须同时生效），

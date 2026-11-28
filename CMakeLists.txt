@@ -481,3 +481,13 @@ if (COURSE_REGISTRATION_WITH_SESSION)
     add_test(NAME http_team4_integration COMMAND http_team4_integration_tests)
     set_tests_properties(http_team4_integration PROPERTIES TIMEOUT 120)
 endif()
+
+# 前端纯文本函数的回归测试：不需要浏览器，检查教室名转义与改密弹窗模板。
+# 教室名由管理员自由填写，原样进入 innerHTML 会变成标签，这条测试守住转义契约。
+# 没装 Node.js 时直接跳过，不让它变成构建失败的来源。
+find_program(COURSE_REGISTRATION_NODE_EXECUTABLE node)
+if (COURSE_REGISTRATION_NODE_EXECUTABLE)
+    add_test(NAME web_text_regression
+             COMMAND ${COURSE_REGISTRATION_NODE_EXECUTABLE}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/web/tests/app_text_test.js)
+endif()

@@ -2,9 +2,7 @@
 
 ## 改进型大学选课系统 · Team 4
 
-2026-11-19 持久化阶段整合候选版本。已整合三人的 C++17 业务模块、JSON 整库快照、选退课及管理员修改的持久化入口。最终浏览器页面、真实密码登录与会话、Web 并发协调仍待完成。
-
-当前为**三人阶段整合后的管理员模块加固版本**，状态更新于 **2026 年 11 月 29 日**。已接入三人的核心业务模块、控制台演示和六套自动化测试；管理员模块的持久化、凭据保留、失败路径验收与 libsodium 构建约束已完成。完整网页、登录认证仍未接入。
+当前为**三人阶段整合后的教师 / 管理员模块版本**，状态更新于 **2026 年 11 月 29 日**。已接入三人的核心业务模块、控制台演示、教师与管理员 HTTP 接口及页面、公共会话登录与本人改密。公共骨架来自组长 `c7c5080`，本分支在 `cb51bce` 合入；教师 / 管理员接口与页面在 `5a3b5c5`。Debug 与 Release 各 19 套自动化测试全部通过。学生页面与选退课路由仍由 Kai / Yuhua 提供。
 
 | 成员 | 本次成果 | 原始提交 |
 | --- | --- | --- |
@@ -33,9 +31,9 @@
 ```text
 header_files/        选课规则、教师管理员、学生查询的结构与接口声明
 source_code/         三个业务模块实现及各自的控制台演示
-automated_tests/     七套业务、持久化与 HTTP 接口测试（含第 4 周失败路径验收）
+automated_tests/     九套业务、持久化、HTTP、会话与端到端测试
 documentation/      接口说明、决策记录、失败矩阵、HTTP 说明和测试资料
-web/                 教师端、管理员端页面（原生 JS + fetch）
+web/                 登录页、教师端、管理员端页面（原生 JS + fetch）与前端回归脚本
 third_party/         cpp-httplib、nlohmann/json（版本与哈希见其 README）
 docs/task3/         Task 3 图、可编辑源文件与配套说明
 weekly/             阶段开发记录
@@ -53,22 +51,29 @@ README.md           项目概况、运行方法与当前状态
 - Windows PowerShell。
 - 目标编译器 **MSVC 2022（19.40+）+ CMake 3.21+**：持久化相关的两个测试用到
   `<filesystem>`，MinGW GCC 8 在 Windows 上会因 `path` 的宽字符类型编译失败，
-  所以完整 7 个测试请用 CMake + Visual Studio 2022 生成器。
+  所以完整 19 个测试请用 CMake + Visual Studio 2022 生成器。
 - 只想跑业务逻辑（不含持久化）时，`g++`（GCC 8.1+）也够用：`build_and_test.ps1`
   会自动跳过在此环境下无法编译的持久化目标。
 
-### 推荐：CMake + MSVC 2022（全部 7 个测试）
+### 推荐：CMake + MSVC 2022（全部 19 个测试）
 
 ```powershell
-cmake -S . -B build\cmake -G "Visual Studio 17 2022" -A x64
+cmake -S . -B build\cmake -G "Visual Studio 17 2022" -A x64 `
+    -DCOURSE_REGISTRATION_USE_SODIUM=ON -DCOURSE_REGISTRATION_WITH_SESSION=ON `
+    "-DSODIUM_ROOT=<libsodium 包根目录>"
 cmake --build build\cmake --config Debug
 ctest --test-dir build\cmake -C Debug --output-on-failure
 ```
 
-预期 7/7 通过：`course_registration_business_rules`、`teacher_and_administration_services`、
-`student_query_and_timetable`、`persistence`、`persistent_administration`、
-`admin_failure_acceptance`（第 4 周的失败路径验收，309 项检查）、
-`http_teacher_admin`（第 5 周的教师/管理员 HTTP 接口，270 项检查）。
+预期 19/19 通过。业务与持久化：`course_registration_business_rules`、
+`teacher_and_administration_services`（505 项）、`student_query_and_timetable`、`persistence`、
+`persistent_administration`（134 项）、`admin_failure_acceptance`（309 项）、
+`registration_credit_limit`、`registration_cross_module_acceptance`、
+`registration_storage_integration`、`shared_persistence_acceptance`、`student_interface`、
+`login_service`、`password_service`、`session`。
+HTTP 与页面：`http_teacher_admin`（274 项 handler 检查）、
+`http_team4_integration`（126 项真实会话端到端）、`web_text_regression`（18 项前端回归，
+需要 Node.js，未安装时不注册该项）。
 
 需要密码哈希（Argon2id）时按 `documentation/account_onboarding_and_libsodium_build.md`
 开启 `-DCOURSE_REGISTRATION_USE_SODIUM=ON`，验收范围仅限 Windows x64 + MSVC 2022
@@ -94,6 +99,20 @@ powershell -ExecutionPolicy Bypass -File .\run_registration_storage_acceptance.p
 .\build\student_query_demonstration.exe                    # 学生搜索、余量与课表
 ```
 
+### 网页与真实登录
+
+```powershell
+# 先给账号设初始密码（写进独立的状态文件，不要用真实凭据）
+.\build\cmake-team4\Debug\password_setup.exe --state data\team4-state.json --account A2020001
+
+# 同进程一个 SessionRuntime：登录、当前身份、退出、本人改密 + 教师/管理员路由
+.\build\cmake-team4\Debug\http_team4_web_server.exe `
+    --host 127.0.0.1 --port 8080 --state data\team4-state.json --web-root web
+```
+
+浏览器打开 `http://127.0.0.1:8080/`，按角色进入 `/admin.html` 或 `/teacher.html`；
+顶栏“修改我的密码”调用公共 `PUT /api/auth/password`，成功后回到登录页。
+
 ## 本次整合与验证
 
 本次阶段整合接入以下开发记录，采用合并提交保留历史，不通过重新上传文件替代成员原有提交：
@@ -117,7 +136,9 @@ powershell -ExecutionPolicy Bypass -File .\run_registration_storage_acceptance.p
 公共会话与本人改密实现见 [公共 HTTP 接入说明](documentation/session_integration.md)。
 打开 `COURSE_REGISTRATION_WITH_SESSION` 和 libsodium 后，可构建统一登录、当前身份、退出和本人改密 API，
 并使用 `run_session_acceptance.ps1` 验证。`session.hpp` 位于 `header_files`，命名空间为 `course_registration`。
-学生、教师、管理员页面和业务路由尚未在此分支完成共同接入，本轮没有合并其他成员分支。
+教师 / 管理员路由与页面的接入方式、路由表与复核结果见
+[教师 / 管理员 HTTP 接口](documentation/http_teacher_admin.md) 与
+[复核回复](documentation/review_2026-11-29_http_session.md)。学生页面与选退课路由仍待 Kai / Yuhua 接入。
 
 原班教师停用后，管理员能否继续改该班时间和容量，用户于 11 月 19 日选择继续待讨论。候选版本保留当前允许行为及已有检查，不将其记录为已确认政策；新建班或改派给停用教师仍拒绝。内部数字 ID 跨角色唯一、课程归档/停用、管理员账号维护页面均未在此次整合中扩展。
 

@@ -22,6 +22,10 @@ namespace http {
 // 未匹配到路由时返回 404 RecordNotFound。
 Response dispatch(const Request& request, Services& services);
 
+// 把可能含服务器内部路径的存储错误信息替换成页面可读的提示；错误码不变。
+// 路由生成响应和正式适配层写回错误时都必须经过它，避免一处改了一处漏掉。
+OperationResult public_result(const OperationResult& result);
+
 // 自带加锁的便捷入口，只给独立服务器与本模块自测使用；
 // 接入组长会话骨架后不要用它，否则会和 with_business_lock() 重复加锁。
 Response dispatch_locked(const Request& request, Services& services);

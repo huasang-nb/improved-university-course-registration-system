@@ -3,7 +3,7 @@
 (function () {
   "use strict";
 
-  const { api, esc, report, meetingsText, table, toast } = window.Team4;
+  const { api, esc, report, meetingsText, table, toast, roleText } = window.Team4;
 
   const state = { classes: [], selected: null };
 
@@ -89,7 +89,8 @@
       return;
     }
     document.getElementById("identity").textContent =
-      user.name + "（" + user.account_number + " · " + user.role + "）";
+      roleText(user.role) + " " + user.account_number + "（用户编号 " +
+      user.user_id + "）";
     if (user.role !== "Teacher") {
       document.getElementById("guard").innerHTML =
         '<p class="empty">本页面只对教师开放，当前角色是 ' + esc(user.role) + "。</p>";

@@ -3,7 +3,7 @@
 (function () {
   "use strict";
 
-  const { api, esc, report, toast, meetingRow, collectMeetings, meetingsText, table, activeBadge } =
+  const { api, esc, report, toast, meetingRow, collectMeetings, meetingsText, table, activeBadge, roleText } =
     window.Team4;
 
   const state = {
@@ -548,7 +548,8 @@
       return;
     }
     document.getElementById("identity").textContent =
-      user.name + "（" + user.account_number + " · " + user.role + "）";
+      roleText(user.role) + " " + user.account_number + "（用户编号 " +
+      user.user_id + "）";
     if (user.role !== "Administrator") {
       document.getElementById("guard").innerHTML =
         '<p class="empty">本页面只对管理员开放，当前角色是 ' + esc(user.role) + "。</p>";

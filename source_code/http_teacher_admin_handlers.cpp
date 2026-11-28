@@ -18,6 +18,7 @@
 #include <map>
 #include <mutex>
 #include <regex>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -100,11 +101,16 @@ Response failure_json(int status, const std::string& code, const std::string& me
     return {status, body.dump()};
 }
 
+// 存储失败时底层 message 里带着服务器状态文件的绝对路径、备份名等内部信息，
+// 不能原样回给页面。错误码（StorageIoError 等）保留，页面据此显示“保存失败、可重试”；
+// 具体路径和底层异常只留在服务器端日志里。
+
 Response from_result(const OperationResult& result, json data = json()) {
     if (result.code == ResultCode::Success) {
         return success_json(std::move(data), result.message);
     }
-    return failure_json(status_for(result.code), name_for(result.code), result.message);
+    const OperationResult safe = public_result(result);
+    return failure_json(status_for(safe.code), name_for(safe.code), safe.message);
 }
 
 // ---------------------------------------------------------------- 会话与权限
@@ -195,11 +201,37 @@ bool body_to_object(const Request& request, json& out, Response& error) {
         error = failure_json(400, "InvalidInput", "request body exceeds 64 KiB");
         return false;
     }
+
+    // 重复字段必须在解析阶段发现：nlohmann/json 解析完成后对象里只剩最后一个同名字段，
+    // 之后再遍历已经看不到前一个值（例如 {"capacity":0,"capacity":2} 会被当成容量 2 接受）。
+    // 这里用解析回调按“每一层对象”记键：object_start 时清空该层，遇到同层重复键就标记；
+    // 数组里的多个对象各自从 object_start 重新开始，所以 meetings[0].room 与
+    // meetings[1].room 不会被误判成重复。发现重复直接拒绝，不执行业务、不保存。
+    bool duplicate_key = false;
+    std::map<int, std::set<std::string>> keys_by_depth;
     json parsed;
     try {
-        parsed = json::parse(request.body);
+        parsed = json::parse(
+            request.body,
+            [&](int depth, json::parse_event_t event, json& value) {
+                if (event == json::parse_event_t::object_start) {
+                    // 对象在 depth 处开始，它的键事件带的是 depth + 1；
+                    // 清错一层会把上一个对象的键留着，导致正常请求被误判成重复字段。
+                    keys_by_depth[depth + 1].clear();
+                } else if (event == json::parse_event_t::key &&
+                           !keys_by_depth[depth].insert(value.get<std::string>()).second) {
+                    duplicate_key = true;
+                }
+                return true;
+            },
+            false);
     } catch (const json::parse_error&) {
         error = failure_json(400, "InvalidInput", "request body is not valid JSON");
+        return false;
+    }
+    if (duplicate_key) {
+        error = failure_json(400, "InvalidInput",
+                             "request body contains a duplicated field; send each field once");
         return false;
     }
     if (!parsed.is_object()) {
@@ -952,6 +984,21 @@ Response not_found(const Request& request) {
 }
 
 }  // namespace
+
+OperationResult public_result(const OperationResult& result) {
+    switch (result.code) {
+        case ResultCode::StorageIoError:
+        case ResultCode::StorageParseError:
+        case ResultCode::StorageSchemaMismatch:
+        case ResultCode::StorageIntegrityError:
+        case ResultCode::StorageBackupMissing:
+            return {result.code,
+                    "storage failure: nothing was changed; check the state file and retry"};
+        default:
+            return result;
+    }
+}
+
 
 int status_for(ResultCode code) {
     switch (code) {

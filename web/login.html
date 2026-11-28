@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>团队选课系统 · 登录</title>
+  <link rel="stylesheet" href="shared/app.css">
+</head>
+<body>
+  <div class="topbar">
+    <strong>团队选课系统</strong>
+    <span class="hint">教师与管理员共用入口</span>
+  </div>
+  <main class="panel" style="max-width: 380px; margin: 48px auto;">
+    <h2>登录</h2>
+    <p class="hint">
+      使用学校下发的初始密码登录。学生页面由其他成员接入，这里只提供教师与管理员入口。
+    </p>
+    <form id="login-form" autocomplete="on">
+      <label class="field">账号
+        <input id="account" name="account" autocomplete="username" required>
+      </label>
+      <label class="field">密码
+        <input id="password" name="password" type="password"
+               autocomplete="current-password" required>
+      </label>
+      <div class="form-actions">
+        <button type="submit">登录</button>
+      </div>
+    </form>
+    <p id="login-error" class="hint" style="color: #b3261e;"></p>
+  </main>
+  <div id="toast" class="toast"></div>
+  <script src="shared/app.js"></script>
+  <script src="shared/login.js"></script>
+</body>
+</html>
