@@ -12,3 +12,8 @@ build/
 # Python 缓存（生成图的脚本）
 __pycache__/
 *.pyc
+
+# 本地 HTTP 联调与测试运行时目录（不入库）
+http-dev-runtime/
+http-test-runtime/
+data/http-dev-state.json

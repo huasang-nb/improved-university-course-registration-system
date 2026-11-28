@@ -47,8 +47,10 @@
 ```text
 header_files/        选课规则、教师管理员、学生查询的结构与接口声明
 source_code/         三个业务模块实现及各自的控制台演示
-automated_tests/     六套业务与持久化测试（含第 4 周失败路径验收）
-documentation/      接口说明、变更说明、失败矩阵和测试资料
+automated_tests/     七套业务、持久化与 HTTP 接口测试（含第 4 周失败路径验收）
+documentation/      接口说明、决策记录、失败矩阵、HTTP 说明和测试资料
+web/                 教师端、管理员端页面（原生 JS + fetch）
+third_party/         cpp-httplib、nlohmann/json（版本与哈希见其 README）
 docs/task3/         Task 3 图、可编辑源文件与配套说明
 weekly/             阶段开发记录
 build_and_test.ps1   编译全部测试与演示，并运行当前环境可用的测试
@@ -65,11 +67,11 @@ README.md           项目概况、运行方法与当前状态
 - Windows PowerShell。
 - 目标编译器 **MSVC 2022（19.40+）+ CMake 3.21+**：持久化相关的两个测试用到
   `<filesystem>`，MinGW GCC 8 在 Windows 上会因 `path` 的宽字符类型编译失败，
-  所以完整 6 个测试请用 CMake + Visual Studio 2022 生成器。
+  所以完整 7 个测试请用 CMake + Visual Studio 2022 生成器。
 - 只想跑业务逻辑（不含持久化）时，`g++`（GCC 8.1+）也够用：`build_and_test.ps1`
   会自动跳过在此环境下无法编译的持久化目标。
 
-### 推荐：CMake + MSVC 2022（全部 6 个测试）
+### 推荐：CMake + MSVC 2022（全部 7 个测试）
 
 ```powershell
 cmake -S . -B build\cmake -G "Visual Studio 17 2022" -A x64
@@ -77,9 +79,10 @@ cmake --build build\cmake --config Debug
 ctest --test-dir build\cmake -C Debug --output-on-failure
 ```
 
-预期 6/6 通过：`course_registration_business_rules`、`teacher_and_administration_services`、
+预期 7/7 通过：`course_registration_business_rules`、`teacher_and_administration_services`、
 `student_query_and_timetable`、`persistence`、`persistent_administration`、
-`admin_failure_acceptance`（第 4 周的失败路径验收，309 项检查）。
+`admin_failure_acceptance`（第 4 周的失败路径验收，309 项检查）、
+`http_teacher_admin`（第 5 周的教师/管理员 HTTP 接口，270 项检查）。
 
 需要密码哈希（Argon2id）时按 `documentation/account_onboarding_and_libsodium_build.md`
 开启 `-DCOURSE_REGISTRATION_USE_SODIUM=ON`，验收范围仅限 Windows x64 + MSVC 2022
@@ -158,14 +161,32 @@ ctest --test-dir build\cmake -C Debug --output-on-failure
 验收结果（MSVC 2022 / CMake 3.30.5，Debug 与 Release 各一轮）：
 `ctest` 6/6；失败路径验收 309 项、教师与管理员 505 项、管理员持久化 134 项全部通过。
 
+## 第 5 周（11/30–12/2）HTTP 接口与页面
+
+按两份 HTTP 手册实现教师端与管理员端的接口和页面，接入点只依赖组长提供的
+「会话身份 + CSRF 结果」回调，其余（路由、权限、JSON 校验、持久化保存）都在本模块内完成。
+
+- 路由：教师 3 条、管理员 16 条，统一 `/api/teacher`、`/api/admin` 前缀与
+  `{code, message, data}` 外壳，状态码映射见
+  [HTTP 接口与页面说明](documentation/http_teacher_admin.md)。
+- 页面：`web/teacher.html`（本人教学班、班级摘要、学生名单）、`web/admin.html`
+  （课程与教学班增删改、容量、学生/教师资料、选课规则）。
+- 测试：`http_teacher_admin` 270 项，覆盖 401/403/404/400/409、CSRF、停用账号旧会话、
+  未知字段、64 KiB 上限、URL 与正文编号不一致，以及“写入成功后重新载入仍一致”。
+- 本地联调：`http_teacher_admin_dev_server.exe --role admin --id 900`（仅本机、
+  不做密码校验，产品入口仍由组长提供）。
+- 契约与确认项：`documentation/decisions/0001-http-contract.md`。
+
+本轮 ctest 7/7（新增 `http_teacher_admin`），Debug 与 Release 各一轮。
+
 ## 后续工作
 
 1. 维护现有回归测试，后续接口或业务规则变更时同步更新文档。
 2. 接入登录、账号状态校验及可信的用户身份（组长负责），把权限规则接到登录结果上。
-3. 接入网页和请求入口，验证三类用户的完整操作流程；管理员模块的失败结果目前以
-   `OperationResult` 返回，由调用方负责呈现。
+3. 教师端、管理员端页面已在本模块提供（`web/`），待组长登录与会话骨架就绪后联调；
+   学生端页面与选退课接口由 Kai / Yuhua 负责。
 4. 学生可选列表过滤停用教师、选课入口拒绝停用教师班级：已确认，待实现和联调；
-   原班教师停用后能否改时间/容量仍待讨论（当前实现允许）。
+   原班教师停用后允许改时间/容量（保留容量下界与冲突检查，2026-11-28 已确认）。
 5. 每周向组织仓库同步复核后的阶段成果，并更新测试、缺陷与开发记录。
 
 Task 3 中 Zhu 的图与说明见 [图清单](docs/task3/FIGURES.md)，Yikai 的图、源文件和说明见 [member_b](docs/task3/member_b/README.md)。已有文档和图仍需随实际接口变更同步维护。

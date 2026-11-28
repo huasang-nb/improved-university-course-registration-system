@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>管理员维护 · 选课系统</title>
+  <link rel="stylesheet" href="shared/app.css">
+</head>
+<body data-role="admin">
+  <header class="topbar">
+    <h1>管理员维护</h1>
+    <div class="topbar-right">
+      <span id="identity">未登录</span>
+      <button id="refresh" type="button">刷新</button>
+    </div>
+  </header>
+
+  <p id="guard" class="notice"></p>
+
+  <main id="content" hidden>
+    <nav class="tabs">
+      <button type="button" data-tab="courses" class="active">课程与教学班</button>
+      <button type="button" data-tab="students">学生</button>
+      <button type="button" data-tab="teachers">教师</button>
+      <button type="button" data-tab="rule">选课规则</button>
+    </nav>
+
+    <!-- 课程 -->
+    <section class="tab-panel" data-tab="courses">
+      <h2>课程列表</h2>
+      <div id="course-table"></div>
+
+      <h2 id="course-form-title">新建课程（含第一个教学班）</h2>
+      <form id="course-form" autocomplete="off">
+        <div class="form-row">
+          <label>课程编号 <input id="course-id" type="number" min="1" required></label>
+          <label>课程代码 <input id="course-code" type="text" maxlength="20" required></label>
+          <label>课程名称 <input id="course-name" type="text" maxlength="60" required></label>
+          <label>学分 <input id="course-credits" type="number" min="1" max="30" required></label>
+        </div>
+        <fieldset id="course-first-class">
+          <legend>第一个教学班</legend>
+          <div class="form-row">
+            <label>班级编号 <input id="first-class-id" type="number" min="1" required></label>
+            <label>任课教师 <select id="first-class-teacher" required></select></label>
+            <label>容量 <input id="first-class-capacity" type="number" min="1" required></label>
+          </div>
+          <div id="course-meetings" class="meetings"></div>
+          <button id="add-course-meeting" type="button" class="ghost">添加上课时段</button>
+        </fieldset>
+        <p class="hint" id="course-course-label"></p>
+        <div class="form-actions">
+          <button id="course-submit" type="submit">创建</button>
+          <button id="course-reset" type="button" class="ghost">清空</button>
+        </div>
+      </form>
+
+      <h2>教学班列表</h2>
+      <div id="class-table"></div>
+
+      <h2 id="class-form-title">新建教学班</h2>
+      <form id="class-form" autocomplete="off">
+        <div class="form-row">
+          <label>班级编号 <input id="class-id" type="number" min="1" required></label>
+          <label>课程 <select id="class-course" required></select></label>
+          <label>任课教师 <select id="class-teacher" required></select></label>
+          <label>容量 <input id="class-capacity" type="number" min="1" required></label>
+        </div>
+        <div id="class-meetings" class="meetings"></div>
+        <button id="add-class-meeting" type="button" class="ghost">添加上课时段</button>
+        <div class="form-actions">
+          <button id="class-submit" type="submit">创建</button>
+          <button id="class-reset" type="button" class="ghost">清空</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- 学生 -->
+    <section class="tab-panel" data-tab="students" hidden>
+      <h2>学生列表</h2>
+      <div id="student-table"></div>
+
+      <h2 id="student-form-title">新建学生</h2>
+      <form id="student-form" autocomplete="off">
+        <div class="form-row">
+          <label>编号 <input id="student-id" type="number" min="1" required></label>
+          <label>学号 <input id="student-number" type="text" maxlength="20" required></label>
+          <label>姓名 <input id="student-name" type="text" maxlength="40" required></label>
+          <label>专业 <input id="student-major" type="text" maxlength="40"></label>
+          <label class="inline"><input id="student-active" type="checkbox" checked> 账号启用</label>
+        </div>
+        <div class="form-actions">
+          <button type="submit">保存学生</button>
+          <button id="student-reset" type="button" class="ghost">清空</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- 教师 -->
+    <section class="tab-panel" data-tab="teachers" hidden>
+      <h2>教师列表</h2>
+      <div id="teacher-table"></div>
+
+      <h2 id="teacher-form-title">新建教师</h2>
+      <form id="teacher-form" autocomplete="off">
+        <div class="form-row">
+          <label>编号 <input id="teacher-id" type="number" min="1" required></label>
+          <label>工号 <input id="teacher-number" type="text" maxlength="20" required></label>
+          <label>姓名 <input id="teacher-name" type="text" maxlength="40" required></label>
+          <label>院系 <input id="teacher-department" type="text" maxlength="40"></label>
+          <label class="inline"><input id="teacher-active" type="checkbox" checked> 账号启用</label>
+        </div>
+        <div class="form-actions">
+          <button type="submit">保存教师</button>
+          <button id="teacher-reset" type="button" class="ghost">清空</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- 选课规则 -->
+    <section class="tab-panel" data-tab="rule" hidden>
+      <h2>本轮状态</h2>
+      <dl class="rule-summary">
+        <dt>选课开关</dt><dd id="rule-open">—</dd>
+        <dt>本轮是否已开放过</dt><dd id="rule-round">—</dd>
+        <dt>选课时间</dt><dd id="rule-period">—</dd>
+        <dt>学分上限</dt><dd id="rule-credits">—</dd>
+      </dl>
+
+      <form id="rule-period-form" autocomplete="off">
+        <h3>设置选课时间</h3>
+        <div class="form-row">
+          <label>开始 <input id="rule-opens" type="datetime-local" required></label>
+          <label>结束 <input id="rule-closes" type="datetime-local" required></label>
+        </div>
+        <div class="form-actions"><button type="submit">保存时间</button></div>
+      </form>
+
+      <form id="rule-limit-form" autocomplete="off">
+        <h3>设置学分上限</h3>
+        <p class="hint">本轮一旦开放过，上限就锁定，不能再改。</p>
+        <div class="form-row">
+          <label>上限 <input id="rule-limit" type="number" min="1" max="100" required></label>
+        </div>
+        <div class="form-actions"><button type="submit">保存上限</button></div>
+      </form>
+
+      <h3>关闭本轮选课</h3>
+      <p class="hint">关闭后学生不能再选课；已选记录保留，退课仍按原规则处理。</p>
+      <div class="form-actions"><button id="rule-close" type="button" class="danger">关闭本轮</button></div>
+    </section>
+  </main>
+
+  <div id="toast" hidden></div>
+
+  <script src="shared/app.js"></script>
+  <script src="shared/admin.js"></script>
+</body>
+</html>

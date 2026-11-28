@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>教师端 · 教学班查询</title>
+  <link rel="stylesheet" href="shared/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>教师端 · 我的教学班</h1>
+    <div class="who" id="identity">正在确认会话…</div>
+  </header>
+
+  <main>
+    <div id="guard"></div>
+
+    <div id="content" hidden>
+      <section class="panel">
+        <h2>我负责的教学班</h2>
+        <div class="row">
+          <button id="refresh">刷新</button>
+          <span class="hint">只显示你本人的教学班；查看其他教师的班级会被拒绝（403）。</span>
+        </div>
+        <div id="class-list"></div>
+      </section>
+
+      <section class="panel">
+        <h2 id="detail-title">教学班详情</h2>
+        <div id="summary"><p class="empty">选择上方班级后显示汇总。</p></div>
+        <div id="roster"></div>
+      </section>
+    </div>
+  </main>
+
+  <script src="shared/app.js"></script>
+  <script src="shared/teacher.js"></script>
+</body>
+</html>

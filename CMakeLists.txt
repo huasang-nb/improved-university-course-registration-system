@@ -142,6 +142,60 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
+# [Zhu Ziliang 追加] 第 5 周：教师 / 管理员 HTTP 接口（cpp-httplib + nlohmann/json）。
+#
+#   http_teacher_admin_handlers：与框架无关的请求分发，可直接单测；
+#   http_teacher_admin_routes  ：cpp-httplib 适配层，交给公共骨架注册；
+#   http_teacher_admin_tests   ：直接调 dispatch()，验证 401/403/400/409/CSRF/落盘。
+#
+# httplib 需要 Windows 10 SDK；MinGW GCC 8 的头文件过旧，routes 目标只在 Windows +
+# MSVC 下构建。handler 测试用 MSVC 构建（依赖持久化的 <filesystem>）。
+# ---------------------------------------------------------------------------
+add_library(http_teacher_admin_handlers
+    source_code/http_teacher_admin_handlers.cpp)
+target_link_libraries(http_teacher_admin_handlers
+    PUBLIC teacher_and_administration_services persistent_administration_service)
+target_include_directories(http_teacher_admin_handlers
+    PUBLIC header_files)
+target_include_directories(http_teacher_admin_handlers
+    SYSTEM PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/third_party/nlohmann)
+
+add_executable(http_teacher_admin_tests
+    automated_tests/http_teacher_admin_tests.cpp)
+target_link_libraries(http_teacher_admin_tests
+    PRIVATE http_teacher_admin_handlers)
+add_test(NAME http_teacher_admin COMMAND http_teacher_admin_tests)
+
+if (WIN32)
+    add_library(http_teacher_admin_routes
+        source_code/http_teacher_admin_routes.cpp)
+    target_link_libraries(http_teacher_admin_routes
+        PUBLIC http_teacher_admin_handlers ws2_32)
+    target_include_directories(http_teacher_admin_routes
+        PUBLIC header_files)
+    target_include_directories(http_teacher_admin_routes
+        SYSTEM PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/third_party/httplib)
+
+    # 本地验证用：把接口和 web/ 页面挂到一个真实服务器上，身份由命令行指定。
+    # 不含登录与会话，仅监听 127.0.0.1，供联调与页面走查；产品入口仍由组长提供。
+    add_executable(http_teacher_admin_dev_server
+        source_code/http_teacher_admin_dev_server.cpp)
+    target_link_libraries(http_teacher_admin_dev_server
+        PRIVATE http_teacher_admin_routes ws2_32)
+endif()
+
+if (MSVC)
+    target_compile_options(http_teacher_admin_handlers PRIVATE /W4)
+    target_compile_options(http_teacher_admin_tests PRIVATE /W4)
+    if (WIN32)
+        target_compile_options(http_teacher_admin_routes PRIVATE /W4)
+    endif()
+else()
+    target_compile_options(http_teacher_admin_handlers PRIVATE -Wall -Wextra)
+    target_compile_options(http_teacher_admin_tests PRIVATE -Wall -Wextra)
+endif()
+
+# ---------------------------------------------------------------------------
 # [Zhu Ziliang 追加] 可选依赖：libsodium（Argon2id 密码哈希），默认关闭。
 # 本阶段只验收 **Windows x64 + MSVC 2022 + 官方动态包（dynamic）**：
 #   * 静态链接、Linux/GCC 都未验证，配置阶段直接拒绝；
