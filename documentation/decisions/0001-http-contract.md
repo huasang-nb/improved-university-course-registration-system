@@ -107,4 +107,5 @@
 | 2026-11-28 | 张宇华 / Zhu Ziliang | 路由与页面分工 | `PUT /api/auth/password` 只在公共 HTTP 服务注册一次，三个角色共用；学生页入口由 Kai 复用 `installPasswordEntry()`；本模块不重复注册 `/api/auth/*` |
 | 2026-11-28 | 张宇华 / Zhu Ziliang | 第 32 项 会话骨架对齐 | `session.hpp` + `course_registration` 命名空间；回调返回 void、业务结果用捕获带出；401/403/409/500 按上表区分；`require_session` 通过后才续期；`LockedServices::context()` 供锁内只读；正式路由锁内调 `dispatch()`，不再用 `dispatch_locked()` |
 | 2026-11-28 | 张宇华 / Zhu Ziliang | 第 28 项 密码服务归属 | 生成/校验/本人改密的公共服务由张宇华负责并统一 Argon2id；登录拒绝未设密码、哈希损坏与密码错误；三端页面共用 `PUT /api/auth/password`；改密成功后撤销该账号全部旧会话；本模块只保留页面入口 |
+| 2026-11-28 | 张宇华 / Zhu Ziliang | `/api/auth/me` 字段与锁内结果码 | `data.user` 含 `role`（`Student`/`Teacher`/`Administrator`）、`user_id`（整数）、`account_number`；`data.csrf_token` 为当前会话 Token；user 在 `data` 内，页面不依赖 `name`；失败仍是 `code`/`message`/`data:null`。锁内结果：`Success`、`AuthenticationRequired`→401、`PermissionDenied`→403；`Storage*` 保留原码 500；内部异常 500 `InternalError`。学生页面与选退课路由由 Kai 负责；页面测试留到整合阶段统一检查 |
 | 2026-11-28 | Zhu Ziliang | 第 32 项 会话骨架接口 | 采用 Yuhua 五组入口；本模块 dispatch 改为锁外调用、由 with_business_lock 持锁；ResultSource 区分 401/403；响应仍逐字段挑选 |

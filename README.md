@@ -72,7 +72,7 @@ ctest --test-dir build\cmake -C Debug --output-on-failure
 `registration_storage_integration`、`shared_persistence_acceptance`、`student_interface`、
 `login_service`、`password_service`、`session`。
 HTTP 与页面：`http_teacher_admin`（274 项 handler 检查）、
-`http_team4_integration`（126 项真实会话端到端）、`web_text_regression`（18 项前端回归，
+`http_team4_integration`（166 项真实会话端到端）、`web_text_regression`（18 项前端回归，
 需要 Node.js，未安装时不注册该项）。
 
 需要密码哈希（Argon2id）时按 `documentation/account_onboarding_and_libsodium_build.md`

@@ -445,6 +445,60 @@ void test_password_change(Fixture& fixture) {
                   __LINE__);
 }
 
+// 公共层已定死 GET /api/auth/me 的字段（2026-11-28）：页面只依赖下面的形状，
+// 所以这里把它锁进测试——字段名、层级或大小写一变，这里先失败，而不是等到
+// 三个页面在浏览器里显示成 undefined。
+void test_me_shape(Fixture& fixture) {
+    struct Expected {
+        const char* account;
+        const char* role;
+        int user_id;
+    };
+    const Expected accounts[] = {
+        {"A2020001", "Administrator", 900},
+        {"T2015007", "Teacher", 100},
+        {"S2023001", "Student", 1001},
+    };
+
+    for (const Expected& expected : accounts) {
+        const Browser browser = fixture.login(expected.account);
+        const auto result = fixture.client_->Get("/api/auth/me", browser.headers());
+        expect_status(result, 200, "Success", __LINE__);
+        const json body = json::parse(result->body);
+
+        // user 在 data 内，不是响应顶层；失败时才有顶层别的形状。
+        CHECK(!body.contains("user"));
+        const json& data = body.at("data");
+        const json& user = data.at("user");
+        CHECK(user.at("role").get<std::string>() == expected.role);
+        CHECK(user.at("user_id").get<int>() == expected.user_id);
+        CHECK(user.at("account_number").get<std::string>() == expected.account);
+        // 页面不再读 name，接口也就不必提供；有的话也不该被依赖。
+        CHECK(!user.contains("name"));
+        CHECK(data.at("csrf_token").is_string());
+        CHECK(!data.at("csrf_token").get<std::string>().empty());
+
+        // 页面用 data.csrf_token 填 X-CSRF-Token；这里确认这个 Token 真的能过
+        // CSRF 校验：带 Token 的管理员写操作成功，不带时报 CsrfRejected。
+        if (std::string(expected.role) == "Administrator") {
+            const std::string payload =
+                json{{"student_id", 1500}, {"student_number", "S2099001"},
+                     {"name", "Shape Probe"}, {"major", "Probe"},
+                     {"account_active", true}}
+                    .dump();
+            expect_status(fixture.client_->Post("/api/admin/students", browser.headers(),
+                                                payload, "application/json"),
+                          403, "CsrfRejected", __LINE__);
+            expect_status(fixture.client_->Post("/api/admin/students", browser.headers(true),
+                                                payload, "application/json"),
+                          200, "Success", __LINE__);
+            expect_status(fixture.client_->Delete("/api/admin/students/1500",
+                                                  browser.headers(true), "", "application/json"),
+                          200, "Success", __LINE__);
+        }
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -452,6 +506,11 @@ int main() {
         const fs::path base = fs::path("http-test-runtime") / "team4_http_session_integration";
         test_result_source_mapping();
 
+        {
+            // 登录接口返回的字段形状先单独锁一次，后面的用例再依赖它。
+            Fixture fixture(base / "me");
+            test_me_shape(fixture);
+        }
         {
             Fixture fixture(base / "unauthenticated");
             test_unauthenticated(fixture);

@@ -53,7 +53,7 @@ $ctest = "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\Co
 | 套件 | 数量 |
 | --- | --- |
 | `http_teacher_admin_tests`（handler 层） | 274 项 |
-| `http_team4_integration_tests`（真实会话端到端） | 126 项 |
+| `http_team4_integration_tests`（真实会话端到端，含 `/api/auth/me` 字段形状） | 166 项 |
 | `admin_failure_acceptance_tests` | 309 项 |
 | `teacher_and_administration_services_tests` | 505 项 |
 | `persistent_administration_tests` | 134 项 |
@@ -113,14 +113,20 @@ http::register_teacher_admin_routes_with_session(server);   // 本模块只注�
 
 ## 5. 仍需你配合 / 未完成
 
-- **`/api/auth/me` 的字段名**：我的改密入口依赖 `data.csrf_token`，三个页面都依赖
-  `data.user.role`/`user.user_id`/`user.account_number`。目前与 `session.hpp` 实现一致，若改名请提前说。
-- **锁内失败的细分**：现在按 `ResultCode` 映射已经够用；“会话在锁内失效”与“其它内部失败”
-  的区分依赖公共层给不同 `ResultCode`，若以后新增来源请同步 `result_source_for()`。
+- **`/api/auth/me` 的字段名（已定，2026-11-28）**：`data.user.role` 为
+  `Student` / `Teacher` / `Administrator`，`data.user.user_id` 为整数，
+  `data.user.account_number` 为当前账号，`data.csrf_token` 为当前会话 Token；
+  user 在 `data` 内，页面不依赖 `name`。已加 `test_me_shape` 把它锁进端到端测试
+  （三种角色各查一次，并用管理员 Token 走一次带/不带 CSRF 的写操作）。
+- **锁内失败的细分（已定，2026-11-28）**：公共层 `with_business_lock` 返回
+  `Success` / `AuthenticationRequired`（401）/ `PermissionDenied`（403）；
+  `Storage*` 保留实际错误码返回 500；锁或回调中的内部异常由公共 HTTP 兜底为
+  500 `InternalError`。`result_source_for()` 已按这张表实现，并有单测覆盖。
 - **测试临时目录**：这台机器 `%TEMP%` 下不能新建子目录，持久化相关测试会报
   `create_directory: 拒绝访问`。跑 `ctest` 前需要把 `TEMP`/`TMP` 指到可写目录（我用
   `build\tmp-release`），否则是环境问题而不是代码失败。建议公共测试也改成相对工作目录。
 - **学生端**：学生页面与选退课不在本模块；正式服务器上学生登录后提示“学生页面尚未接入这个服务器”。
-- **浏览器自动化**：改密弹窗的“打开/输入/取消/Escape/重复打开”是脚本级 + 手动验证，
-  没有引入浏览器自动化框架。
+- **页面测试（按约定留到整合阶段）**：改密弹窗的“打开/输入/保存/取消/Escape/点背景/
+  重复打开”目前是脚本级回归（`web/tests/app_text_test.js` 直接求值模板表达式）加手动验证，
+  没有引入浏览器自动化；三端页面与完整流程等接入共同服务器后统一检查。
 - 首次登录强制改密、管理员在线重置他人密码，按约定本轮不扩展。
