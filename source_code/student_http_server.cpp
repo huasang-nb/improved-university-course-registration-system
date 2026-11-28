@@ -988,8 +988,10 @@ private:
 
 void usage() {
     std::cerr << "用法：course_registration_http_server --state PATH "
-                 "[--host 127.0.0.1] [--port 8080] [--web-root ./web]\n"
-                 "  --state 必须显式指定，服务器不会写入默认 data/state.json。\n";
+                 "[--host 127.0.0.1] [--port 8080] [--web-root ./web] "
+                 "[--demo-password PASSWORD]\n"
+                 "  --state 必须显式指定，服务器不会写入默认 data/state.json。\n"
+                 "  未启用 libsodium 时，必须显式传 --demo-password 才允许本地演示。\n";
 }
 
 }  // namespace
@@ -999,7 +1001,7 @@ int main(int argc, char** argv) {
     int port = 8080;
     std::string state_path;
     std::string web_root = "web";
-    std::string demo_password = "Demo2026!";
+    std::string demo_password;
     for (int i = 1; i < argc; ++i) {
         const std::string argument = argv[i];
         if (argument == "--state" && i + 1 < argc) {
@@ -1027,6 +1029,16 @@ int main(int argc, char** argv) {
         return 2;
     }
 
+#ifndef COURSE_REGISTRATION_USE_SODIUM
+    // 正式登录不再使用演示密码：没启用 libsodium 时必须显式要求本地演示。
+    if (demo_password.empty()) {
+        std::cerr << "未启用 libsodium：正式登录需要真实密码校验。\n"
+                     "本地演示请显式传 --demo-password，或按文档启用 "
+                     "COURSE_REGISTRATION_USE_SODIUM。\n";
+        return 2;
+    }
+#endif
+
 #ifdef COURSE_REGISTRATION_USE_SODIUM
     if (sodium_init() < 0) {
         std::cerr << "libsodium 初始化失败\n";
@@ -1048,8 +1060,8 @@ int main(int argc, char** argv) {
     std::cout << "数据文件：" << state_path << "\n";
     std::cout << "静态页面：" << web_root << "\n";
 #ifndef COURSE_REGISTRATION_USE_SODIUM
-    std::cout << "密码校验：演示模式（--demo-password，默认 " << demo_password
-              << "）；启用 libsodium 后改用 password_hash\n";
+    std::cout << "密码校验：演示模式（--demo-password）；启用 libsodium 后改用 "
+                 "password_hash\n";
 #endif
     if (!service.listen(host, port)) {
         std::cerr << "监听失败：" << host << ":" << port << "\n";

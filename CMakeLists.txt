@@ -341,6 +341,13 @@ if (COURSE_REGISTRATION_USE_SODIUM)
         INTERFACE_INCLUDE_DIRECTORIES "${SODIUM_ROOT}/include")
     set(COURSE_REGISTRATION_SODIUM_TARGET sodium::sodium)
 
+    # 学生 HTTP 服务：开启 libsodium 时使用真实密码校验（编译宏 + 链接 + DLL）。
+    if (TARGET course_registration_http_server)
+        target_compile_definitions(course_registration_http_server
+            PRIVATE COURSE_REGISTRATION_USE_SODIUM)
+        course_registration_link_sodium(course_registration_http_server)
+    endif()
+
     # ---- 配置期实际链接（Debug 与 Release 各一次）----
     file(WRITE "${CMAKE_BINARY_DIR}/sodium_probe.cpp"
          "#include <sodium.h>\nint main() { return sodium_init() < 0 ? 1 : 0; }\n")

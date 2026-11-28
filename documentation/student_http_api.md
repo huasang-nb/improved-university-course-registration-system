@@ -29,16 +29,17 @@ powershell -ExecutionPolicy Bypass -File .\build_and_test.ps1
 .\build\course_registration_http_server.exe `
     --state build\http_demo\state.json `
     --port 8080 `
-    --web-root web
+    --web-root web `
+    --demo-password Demo2026!
 ```
 
 浏览器打开 <http://127.0.0.1:8080/student/index.html>。
 
-- 演示账号：`S2023001`
-- 演示密码：`Demo2026!`
+- 演示账号：`S2023001`（仅未启用 libsodium、且显式传 `--demo-password Demo2026!` 时可用）
 - `--state` 必须显式指定，不会写默认 `data/state.json`；
-- 未启用 libsodium 时用演示密码校验；定义 `COURSE_REGISTRATION_USE_SODIUM` 后
-  改为校验 `password_hash`，空哈希视为“未设置密码”。
+- 未启用 libsodium 时**必须显式传 `--demo-password`** 才允许本地演示，否则启动即拒绝；
+- 定义 `COURSE_REGISTRATION_USE_SODIUM` 后忽略演示密码，改为校验
+  `password_hash`；未设置密码、哈希损坏或密码错误一律拒绝登录。
 
 ## 接口
 

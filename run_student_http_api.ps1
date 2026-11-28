@@ -41,7 +41,8 @@ function Expect-HttpError([scriptblock]$action, [int]$expected) {
 }
 
 $server = Start-Process -FilePath $exe -WindowStyle Hidden -PassThru -ArgumentList @(
-    '--state', $state, '--port', "$port", '--web-root', $webRoot
+    '--state', $state, '--port', "$port", '--web-root', $webRoot,
+    '--demo-password', 'Demo2026!'
 )
 try {
     $ready = $false
