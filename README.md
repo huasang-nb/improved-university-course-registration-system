@@ -2,7 +2,7 @@
 
 ## 改进型大学选课系统 · Team 4
 
-当前为**三人阶段整合后的教师 / 管理员模块版本**，状态更新于 **2026 年 11 月 29 日**。已接入三人的核心业务模块、控制台演示、教师与管理员 HTTP 接口及页面、公共会话登录与本人改密。公共骨架来自组长 `c7c5080`，本分支在 `cb51bce` 合入；教师 / 管理员接口与页面在 `5a3b5c5`。Debug 与 Release 各 19 套自动化测试全部通过。学生页面与选退课路由仍由 Kai / Yuhua 提供。
+当前为**三人阶段整合后的教师 / 管理员模块版本**，状态更新于 **2026 年 11 月 29 日**。已接入三人的核心业务模块、控制台演示、教师与管理员 HTTP 接口及页面、公共会话登录与本人改密。公共骨架来自组长 `c7c5080`，本分支在 `cb51bce` 合入；教师 / 管理员接口与页面在 `5a3b5c5`。Debug 19 套自动化测试全部通过；Release 有效 17 套，另 2 套（`assert` 写法）在 Release 下显式跳过、由 Debug 覆盖。学生页面与选退课路由仍由 Kai / Yuhua 提供。
 
 | 成员 | 本次成果 | 原始提交 |
 | --- | --- | --- |
@@ -65,12 +65,19 @@ cmake --build build\cmake --config Debug
 ctest --test-dir build\cmake -C Debug --output-on-failure
 ```
 
-预期 19/19 通过。业务与持久化：`course_registration_business_rules`、
+Debug 预期 19/19 通过；Release 预期 17/17，另外两套 `assert` 用例显示 `Skipped`（见下）。
+
+业务与持久化：`course_registration_business_rules`、
 `teacher_and_administration_services`（505 项）、`student_query_and_timetable`、`persistence`、
 `persistent_administration`（134 项）、`admin_failure_acceptance`（309 项）、
 `registration_credit_limit`、`registration_cross_module_acceptance`、
 `registration_storage_integration`、`shared_persistence_acceptance`、`student_interface`、
 `login_service`、`password_service`、`session`。
+
+`course_registration_business_rules` 与 `student_query_and_timetable` 这两套老用例是用 `assert`
+写的，Release（`NDEBUG`）下断言会被编译掉。它们在 `NDEBUG` 下打印说明并返回 77，
+`CMakeLists.txt` 里登记了 `SKIP_RETURN_CODE 77`，所以 `ctest -C Release` 会把它们标成
+`Skipped` 而不是假的“通过”；这两套的检查只在 Debug 中真正执行。
 HTTP 与页面：`http_teacher_admin`（274 项 handler 检查）、
 `http_team4_integration`（166 项真实会话端到端）、`web_text_regression`（18 项前端回归，
 需要 Node.js，未安装时不注册该项）。

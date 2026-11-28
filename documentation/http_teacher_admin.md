@@ -54,8 +54,10 @@ register_teacher_admin_routes(server, services,
 
 约定：
 
-1. `dispatch()` 自己在 `business_mutex` 内完成“身份复核 → 业务 → 保存 → 复制响应”，
-   查询也加锁；密码校验等慢操作留在锁外（调用方自行处理）。
+1. 加锁由调用方决定，`dispatch()` 自己不加锁：上面的无会话接法用 `dispatch_locked()`
+   （内部 `std::lock_guard` 锁 `business_mutex`），正式会话接法在公共层
+   `with_business_lock()` 的回调里直接调 `dispatch()`（见第 9 节），两条路径都不会重复加锁。
+   锁内完成“身份复核 → 业务 → 保存 → 复制响应”，查询也在锁内；密码校验等慢操作留在锁外。
 2. 会话身份每次请求都会重新核对：账号仍存在、`account_active` 为真、账号名
    （`normalize_account_key`）与会话一致，否则返回 401 `AuthenticationRequired`。
 3. 写操作要求 `csrf_ok`，否则 403 `CsrfRejected`。读操作不要求 CSRF。
@@ -251,7 +253,7 @@ if (locked.code != ResultCode::Success) {
 write_response(out, response);
 ```
 
-`Services` 里已经没有 `std::mutex&` 成员：锁由公共层持有，handler 若再拿一把锁就是重复加锁。
+`Services` 仍保留 `std::mutex& business_mutex` 成员，独立服务器用它保护“身份检查 + 业务 + 保存”；正式适配器传入一个不会被加锁的局部 mutex，真正的锁由公共层 `with_business_lock()` 持有，以免同一请求被加两次锁。
 `result_source_for()` 的映射（`header_files/http_teacher_admin_session_routes.hpp`）：
 
 | `ResultCode` | `ResultSource` | HTTP |

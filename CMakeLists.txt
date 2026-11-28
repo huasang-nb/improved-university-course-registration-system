@@ -480,6 +480,11 @@ if (COURSE_REGISTRATION_WITH_SESSION)
     course_registration_link_sodium(http_team4_integration_tests)
     add_test(NAME http_team4_integration COMMAND http_team4_integration_tests)
     set_tests_properties(http_team4_integration PROPERTIES TIMEOUT 120)
+
+# 这两套检查是用 assert 写的，Release（NDEBUG）下会被编译掉。测试自己返回 77
+# 表示“检查未生效”，这里登记为 Skipped，避免把假通过算进 Release 的有效结果。
+set_tests_properties(course_registration_business_rules student_query_and_timetable
+                     PROPERTIES SKIP_RETURN_CODE 77)
 endif()
 
 # 前端纯文本函数的回归测试：不需要浏览器，检查教室名转义与改密弹窗模板。

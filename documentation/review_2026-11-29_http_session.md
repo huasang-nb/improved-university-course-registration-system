@@ -10,7 +10,7 @@
 | 分支 | `feature/zhu-http-teacher-admin` |
 | 合入公共骨架 | `cb51bce`（第二父提交 `c7c5080`，第一父提交 `58a7edd`） |
 | 本轮修复 | 分支 HEAD，提交信息 `fix(http): address the review of the teacher and admin module` |
-| 未合入 | 未合 `main`、未推送，等复核通过 |
+| 未合入 | 已推送到 `origin`（`58a7edd` → `b03bb71`），未合 `main`，等复核通过 |
 
 合入时保留了本分支原有能力，没有被公共骨架覆盖：
 
@@ -43,7 +43,9 @@ $ctest = "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\Co
 | 配置 | 构建 | `ctest` |
 | --- | --- | --- |
 | Debug | 成功，无 error | 19/19 通过 |
-| Release | 成功，无 error | 19/19 通过（不依赖 assert） |
+| Release | 成功，无 error | 17/17 有效（另 2 项 Skipped） |
+
+Release 的说明：`course_registration_business_rules`、`student_query_and_timetable` 两套历史用例直接写 `assert`，Release（NDEBUG）下断言被编译器整段去掉，继续打印“通过”就是假通过。现在两套在 `NDEBUG` 下打印说明并返回 77，`CMakeLists.txt` 登记 `SKIP_RETURN_CODE 77`，`ctest` 显示 **Skipped**；这两套的断言只在 Debug 里真正执行。所以 Release 的有效口径是 **17/17**，另外两套由 Debug 覆盖，不再把“19/19”当作 Release 的有效结果。
 
 编译警告只有既有的 `C4996 localtime`（`course_registration_business_rules.cpp:12`、
 `teacher_and_administration_services.cpp:468`）；`/W4` 下本模块无警告。
@@ -70,13 +72,13 @@ $ctest = "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\Co
 
 ```cpp
 SessionRuntime runtime(context, storage, session_options);
-bind_session_runtime(&runtime);
+bind_session_runtime(runtime);
 runtime.register_auth_routes(server);                       // 公共层注册 /api/auth/*
 http::register_teacher_admin_routes_with_session(server);   // 本模块只注册教师/管理员路由
 ```
 
 本模块的适配器在 `with_business_lock()` 回调里调用 `dispatch()`，不调用 `dispatch_locked()`；
-`Services` 已去掉 `std::mutex&` 成员，锁只由公共层持有。
+`Services` 仍保留 `std::mutex& business_mutex` 成员（独立服务器与自测路径要用它），正式适配器传入一个不会被加锁的局部 mutex，真正的锁由公共层持有；`dispatch()` 在适配器路径上不再自己加锁，避免重复加锁。
 
 ## 4. 六项修复与测试证据
 
@@ -127,7 +129,7 @@ http::register_teacher_admin_routes_with_session(server);   // 本模块只注�
 | 会话字段形状 | `cd32606` | `test_me_shape`：三种角色各查一次 `data.user.role`/`user_id`/`account_number`、`data.csrf_token`，并验证 Token 带与不带时的 403 `CsrfRejected` / 200 `Success` |
 
 版本与验证结果：MSVC 2022，`COURSE_REGISTRATION_USE_SODIUM=ON` 与
-`COURSE_REGISTRATION_WITH_SESSION=ON`，Debug 与 Release 各 **19/19**；本条记录对应 HEAD `cd32606`。
+`COURSE_REGISTRATION_WITH_SESSION=ON`，Debug **19/19**、Release **17/17（另 2 项 Skipped）**；本条记录对应 HEAD `cd32606`。
 
 未验证事项（按约定留到整合阶段）：三端页面在浏览器里的完整流程（改密弹窗只做脚本级回归 + 手动验证），
 以及接通共同服务器后的端到端走查。

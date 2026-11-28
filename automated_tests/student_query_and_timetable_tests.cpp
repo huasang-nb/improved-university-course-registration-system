@@ -8,6 +8,14 @@
 using namespace course_registration;
 
 int main() {
+    // 本套件的检查全部用 assert 写，NDEBUG（Release）下会被编译器整段去掉；
+    // 继续打印“通过”会变成假通过。这里显式返回 77，CMake 里给这个测试登记了
+    // SKIP_RETURN_CODE，ctest 会显示 Skipped，而不是把它算成一次成功的验证。
+#ifdef NDEBUG
+    std::cerr << "assert-based checks are disabled in NDEBUG; run the Debug build\n";
+    return 77;
+#endif
+
     // 演示数据按 documentation/interfaces.md 第 4.1 节，和另外两人的测试一致。
     std::vector<Course> courses{
         {1, "SE101", "Software Engineering", 3},
