@@ -359,3 +359,35 @@ if (COURSE_REGISTRATION_USE_SODIUM)
     message(STATUS
         "libsodium: 官方动态包 x64/v143/dynamic（Debug/Release 文件齐全，链接检查通过）")
 endif()
+
+# 公共会话是独立阶段目标。打开它时必须同时启用真实密码库，不使用演示密码回退。
+option(COURSE_REGISTRATION_WITH_SESSION "Build shared HTTP authentication and session support" OFF)
+if (COURSE_REGISTRATION_WITH_SESSION)
+    if (NOT COURSE_REGISTRATION_USE_SODIUM)
+        message(FATAL_ERROR "公共会话需要 COURSE_REGISTRATION_USE_SODIUM=ON 和 SODIUM_ROOT。")
+    endif()
+    add_library(session_service source_code/session.cpp)
+    target_link_libraries(session_service PUBLIC password_service
+        persistent_administration_service persistent_registration_service ws2_32
+        PRIVATE sodium::sodium)
+    target_compile_features(session_service PUBLIC cxx_std_17)
+    target_include_directories(session_service SYSTEM PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/httplib
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/nlohmann)
+    target_compile_options(session_service PRIVATE /W4)
+
+    add_executable(session_auth_server source_code/session_auth_server.cpp)
+    target_link_libraries(session_auth_server PRIVATE session_service)
+    course_registration_link_sodium(session_auth_server)
+
+    add_executable(session_tests automated_tests/session_tests.cpp)
+    target_link_libraries(session_tests PRIVATE session_service)
+    course_registration_link_sodium(session_tests)
+    add_test(NAME session COMMAND session_tests)
+    set_tests_properties(session PROPERTIES TIMEOUT 45)
+
+    # 将来合入 Zhu 的适配器后，让它使用同一个公共实现，而不是另建会话对象。
+    if (TARGET http_teacher_admin_session_routes)
+        target_link_libraries(http_teacher_admin_session_routes PUBLIC session_service)
+    endif()
+endif()

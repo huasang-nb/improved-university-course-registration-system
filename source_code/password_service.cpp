@@ -64,6 +64,38 @@ std::string create_password_hash(std::string_view password) {
 
 }  // namespace
 
+std::string stored_password_hash(const SystemContext& context,
+                                 const UserIdentity& actor) {
+    return current_password_hash(context, actor);
+}
+
+OperationResult validate_new_password(std::string_view password) {
+    if (password.size() < 8) {
+        return {ResultCode::InvalidInput, "new password must contain at least 8 characters"};
+    }
+    if (password.size() > crypto_pwhash_PASSWD_MAX) {
+        return {ResultCode::InvalidInput, "new password is too long"};
+    }
+    bool uppercase = false;
+    bool lowercase = false;
+    bool digit = false;
+    for (unsigned char character : password) {
+        // 33 到 126 是英文半角可见字符，空格、中文和控制字符都不在这个范围。
+        if (character < 33 || character > 126) {
+            return {ResultCode::InvalidInput,
+                    "new password allows only ASCII letters, digits and symbols; whitespace is not allowed"};
+        }
+        uppercase = uppercase || (character >= 'A' && character <= 'Z');
+        lowercase = lowercase || (character >= 'a' && character <= 'z');
+        digit = digit || (character >= '0' && character <= '9');
+    }
+    if (!uppercase || !lowercase || !digit) {
+        return {ResultCode::InvalidInput,
+                "new password must include an uppercase letter, a lowercase letter and a digit"};
+    }
+    return {ResultCode::Success, "new password meets the requirements"};
+}
+
 OperationResult find_password_account(const SystemContext& context,
                                       const std::string& account_number,
                                       PasswordAccount& account) {
@@ -128,8 +160,9 @@ OperationResult set_account_password(SystemContext& context,
                                      const std::string& account_number,
                                      std::string_view password,
                                      bool replace_existing) {
-    if (password.empty() || password.size() > crypto_pwhash_PASSWD_MAX) {
-        return {ResultCode::InvalidInput, "password is empty or too long"};
+    const auto policy = validate_new_password(password);
+    if (policy.code != ResultCode::Success) {
+        return policy;
     }
     PasswordAccount account;
     const auto found = find_password_account(context, account_number, account);
@@ -176,6 +209,90 @@ OperationResult set_account_password(SystemContext& context,
                   "password publication must not throw");
     context = std::move(staging);
     return {ResultCode::Success, "password saved"};
+}
+
+OperationResult prepare_password_change(const SystemContext& snapshot,
+                                         const UserIdentity& actor,
+                                         std::string_view current_password,
+                                         std::string_view new_password,
+                                         PreparedPasswordChange& prepared) {
+    prepared = {};
+    PasswordAccount account;
+    const auto found = find_password_account(snapshot, actor.account_number, account);
+    const std::string hash = current_password_hash(snapshot, actor);
+    if (found.code != ResultCode::Success || hash.empty() ||
+        account.identity.role != actor.role || account.identity.user_id != actor.user_id) {
+        return {ResultCode::AuthenticationRequired, "account is no longer valid"};
+    }
+    if (!verify_password_hash(hash, current_password)) {
+        return {ResultCode::InvalidInput, "current password is incorrect"};
+    }
+    const auto policy = validate_new_password(new_password);
+    if (policy.code != ResultCode::Success) {
+        return policy;
+    }
+    prepared = {actor, hash, create_password_hash(new_password)};
+    return {ResultCode::Success, "password change prepared"};
+}
+
+OperationResult apply_password_change(SystemContext& context,
+                                       const StorageOptions& storage,
+                                       const PreparedPasswordChange& prepared) {
+    const auto current_hash = current_password_hash(context, prepared.actor);
+    if (current_hash.empty()) {
+        return {ResultCode::AuthenticationRequired, "account is no longer valid"};
+    }
+    if (current_hash != prepared.previous_hash) {
+        return {ResultCode::InvalidInput, "password changed during this request; please retry"};
+    }
+    if (prepared.new_hash.rfind("$argon2id$", 0) != 0) {
+        throw std::invalid_argument("password change has not been prepared");
+    }
+    // 使用刚取得业务锁后的最新状态复制，不能用计算哈希之前的旧副本覆盖其他业务修改。
+    SystemContext staging = context;
+    switch (prepared.actor.role) {
+    case Role::Student: {
+        auto student = *staging.find_student(prepared.actor.user_id);
+        student.password_hash = prepared.new_hash;
+        staging.apply_student_change(student);
+        break;
+    }
+    case Role::Teacher: {
+        auto teacher = *staging.find_teacher(prepared.actor.user_id);
+        teacher.password_hash = prepared.new_hash;
+        staging.apply_teacher_change(teacher);
+        break;
+    }
+    case Role::Administrator:
+        for (auto administrator : staging.administrators()) {
+            if (administrator.administrator_id == prepared.actor.user_id) {
+                administrator.password_hash = prepared.new_hash;
+                staging.apply_administrator_change(administrator);
+                break;
+            }
+        }
+        break;
+    }
+    const auto saved = save_state(staging, storage);
+    if (saved.code != ResultCode::Success) {
+        return saved;
+    }
+    context = std::move(staging);
+    return {ResultCode::Success, "password changed; please sign in again"};
+}
+
+OperationResult change_password(SystemContext& context,
+                                 const StorageOptions& storage,
+                                 const UserIdentity& actor,
+                                 std::string_view current_password,
+                                 std::string_view new_password) {
+    PreparedPasswordChange prepared;
+    const auto result = prepare_password_change(context, actor, current_password,
+                                                 new_password, prepared);
+    if (result.code != ResultCode::Success) {
+        return result;
+    }
+    return apply_password_change(context, storage, prepared);
 }
 
 }  // namespace course_registration

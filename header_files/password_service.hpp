@@ -26,6 +26,38 @@ bool verify_password_hash(const std::string& password_hash,
 // 后续 HTTP 也可以先复制账号资料，再在锁外调用 verify_password_hash。
 PasswordVerifier make_stored_password_verifier(const SystemContext& context);
 
+// 新密码至少 8 位，只能使用可见的 ASCII 字符，并且同时包含大写、小写和数字。
+// 登录时不使用这个规则检查旧密码，避免旧账号无法登录后修改密码。
+OperationResult validate_new_password(std::string_view password);
+
+// 下面的准备结果只在服务器内部传递，不能从请求体构造，也不能返回给页面。
+// 把较慢的密码计算和实际保存分开，HTTP 层可以在不持业务锁时计算哈希。
+struct PreparedPasswordChange {
+    UserIdentity actor{};
+    std::string previous_hash;
+    std::string new_hash;
+};
+
+std::string stored_password_hash(const SystemContext& context,
+                                 const UserIdentity& actor);
+OperationResult prepare_password_change(const SystemContext& snapshot,
+                                         const UserIdentity& actor,
+                                         std::string_view current_password,
+                                         std::string_view new_password,
+                                         PreparedPasswordChange& prepared);
+
+// 调用方在共同业务锁内保存。期间密码若已被其他请求修改，这次操作会被拒绝。
+OperationResult apply_password_change(SystemContext& context,
+                                       const StorageOptions& storage,
+                                       const PreparedPasswordChange& prepared);
+
+// 单线程调用或已由调用方协调访问时使用。函数内部保存，成功后才更新 context。
+OperationResult change_password(SystemContext& context,
+                                 const StorageOptions& storage,
+                                 const UserIdentity& actor,
+                                 std::string_view current_password,
+                                 std::string_view new_password);
+
 // 暂行的本机密码设置操作。只修改指定账号的 password_hash，并保存整份数据。
 // 已设置过密码时，需要明确传入 replace_existing=true 才会替换。
 // 保存成功后才把副本放回 context，保存失败时保留原来的内存数据。

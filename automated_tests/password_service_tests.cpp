@@ -1,5 +1,6 @@
 #include "password_service.hpp"
 #include "persistent_registration_service.hpp"
+#include <sodium.h>
 
 #define NOMINMAX
 #include <windows.h>
@@ -47,8 +48,16 @@ int main() {
         require(!login.login("S2023001", "missing").identity,
                 "account with an empty hash must not log in");
 
-        // 真正生成哈希后，再通过原有 LoginService 登录。密码中的空格和中文需要原样保留。
-        const std::string password = u8" 密码-test-value ";
+        // 这些输入不能成为新密码；带符号和不带符号的合法密码都可以使用。
+        for (const auto* value : {"Short1", "lowercase1", "UPPERCASE1", "NoNumber!",
+                                  "Has space1", "Has\tTab1", "Has\nLine1", u8"Password1中文"}) {
+            expect(validate_new_password(value), ResultCode::InvalidInput);
+        }
+        expect(validate_new_password("Abcdef12"), ResultCode::Success);
+        expect(validate_new_password("Abcdef1!"), ResultCode::Success);
+
+        // 真正生成哈希后，再通过原有 LoginService 登录。新密码使用统一的复杂度规则。
+        const std::string password = "Student1!";
         expect(set_account_password(context, storage, " s2023001 ", password),
                ResultCode::Success);
         const auto student_hash = context.students()[0].password_hash;
@@ -65,7 +74,7 @@ int main() {
         // 拒绝替换、找不到账号和空密码时，不应保存，也不能覆盖已有备份。
         const auto before = read_file(storage.path);
         const auto backup = read_file(storage.path + ".bak");
-        expect(set_account_password(context, storage, "S2023001", "replacement"),
+        expect(set_account_password(context, storage, "S2023001", "Replacement1!"),
                ResultCode::InvalidInput);
         expect(set_account_password(context, storage, "absent", password),
                ResultCode::RecordNotFound);
@@ -76,22 +85,22 @@ int main() {
                 "rejected setup changed files");
 
         // 同一个服务对象应该读到设置后的哈希，同时保留其他角色的资料和哈希。
-        expect(set_account_password(context, storage, "T2015007", "teacher-secret"),
+        expect(set_account_password(context, storage, "T2015007", "TeacherSecret1!"),
                ResultCode::Success);
         const auto teacher_hash = context.teachers()[0].password_hash;
-        expect(set_account_password(context, storage, "A2020001", "admin-secret"),
+        expect(set_account_password(context, storage, "A2020001", "AdminSecret1!"),
                ResultCode::Success);
         require(context.students()[0].password_hash == student_hash &&
                     context.teachers()[0].password_hash == teacher_hash,
                 "setting another role's password lost existing hashes");
-        require(login.login("T2015007", "teacher-secret").identity.value().role == Role::Teacher,
+        require(login.login("T2015007", "TeacherSecret1!").identity.value().role == Role::Teacher,
                 "teacher login has the wrong role");
-        require(login.login("A2020001", "admin-secret").identity.value().role == Role::Administrator,
+        require(login.login("A2020001", "AdminSecret1!").identity.value().role == Role::Administrator,
                 "administrator login has the wrong role");
-        expect(set_account_password(context, storage, "S2023001", "new-secret", true),
+        expect(set_account_password(context, storage, "S2023001", "NewSecret1!", true),
                ResultCode::Success);
         require(!login.login("S2023001", password).identity &&
-                    login.login("S2023001", "new-secret").identity.has_value(),
+                    login.login("S2023001", "NewSecret1!").identity.has_value(),
                 "explicit replacement must invalidate the old password");
         require(context.students()[0].password_hash != student_hash,
                 "password replacement must generate a new hash");
@@ -100,7 +109,7 @@ int main() {
         auto reloaded = make_seed_context();
         expect(load_state(storage, reloaded), ResultCode::Success);
         LoginService restarted_login(reloaded, make_stored_password_verifier(reloaded));
-        const auto verified = restarted_login.login("S2023001", "new-secret");
+        const auto verified = restarted_login.login("S2023001", "NewSecret1!");
         require(verified.identity.has_value(), "restart lost the stored credential");
         PersistentRegistrationService registration(reloaded, storage);
         expect(registration.enroll(*verified.identity, 10), ResultCode::Success);
@@ -117,13 +126,13 @@ int main() {
         HANDLE file = CreateFileW(fs::path(storage.path).c_str(), GENERIC_READ,
             FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
         require(file != INVALID_HANDLE_VALUE, "cannot lock test file");
-        const auto failed = set_account_password(reloaded, storage, "S2023001", "retry-secret", true);
+        const auto failed = set_account_password(reloaded, storage, "S2023001", "RetrySecret1!", true);
         CloseHandle(file);
         expect(failed, ResultCode::StorageIoError);
         require(reloaded.students()[0].password_hash == hash_before &&
                     read_file(storage.path) == disk_before,
                 "failed password save changed memory or the primary file");
-        expect(set_account_password(reloaded, storage, "S2023001", "retry-secret", true),
+        expect(set_account_password(reloaded, storage, "S2023001", "RetrySecret1!", true),
                ResultCode::Success);
 
         // 三种角色共用数字编号 42 时，也要按各自账号设置和验证。
@@ -131,27 +140,27 @@ int main() {
             {{42, "Teacher42", "Teacher", "Test", true}},
             {{42, "Admin42", "Admin", true}}, {}, {}, {true, 18});
         StorageOptions shared_storage{(root / "shared.json").string(), false};
-        expect(set_account_password(shared_ids, shared_storage, "Student42", "student"),
+        expect(set_account_password(shared_ids, shared_storage, "Student42", "StudentSecret1!"),
                ResultCode::Success);
-        expect(set_account_password(shared_ids, shared_storage, "Teacher42", "teacher"),
+        expect(set_account_password(shared_ids, shared_storage, "Teacher42", "TeacherSecret1!"),
                ResultCode::Success);
-        expect(set_account_password(shared_ids, shared_storage, "Admin42", "admin"),
+        expect(set_account_password(shared_ids, shared_storage, "Admin42", "AdminSecret1!"),
                ResultCode::Success);
         LoginService shared_login(shared_ids, make_stored_password_verifier(shared_ids));
-        require(shared_login.login("Student42", "student").identity.value().role == Role::Student &&
-                    shared_login.login("Teacher42", "teacher").identity.value().role == Role::Teacher &&
-                    shared_login.login("Admin42", "admin").identity.value().role == Role::Administrator,
+        require(shared_login.login("Student42", "StudentSecret1!").identity.value().role == Role::Student &&
+                    shared_login.login("Teacher42", "TeacherSecret1!").identity.value().role == Role::Teacher &&
+                    shared_login.login("Admin42", "AdminSecret1!").identity.value().role == Role::Administrator,
                 "same numeric ID across roles confused credentials");
-        require(!shared_login.login("Teacher42", "student").identity,
+        require(!shared_login.login("Teacher42", "StudentSecret1!").identity,
                 "another role's password was accepted");
 
         auto disabled = shared_ids.students()[0];
         disabled.account_active = false;
         shared_ids.apply_student_change(disabled);
-        expect(set_account_password(shared_ids, shared_storage, "Student42", "disabled", true),
+        expect(set_account_password(shared_ids, shared_storage, "Student42", "DisabledSecret1!", true),
                ResultCode::Success);
         require(!shared_ids.students()[0].account_active &&
-                    !shared_login.login("Student42", "disabled").identity,
+                    !shared_login.login("Student42", "DisabledSecret1!").identity,
                 "setting a password must not activate an account");
 
         // 旧数据重名时，在计算和保存新密码前就拒绝操作。
@@ -159,9 +168,37 @@ int main() {
         duplicate.teacher_number = " student42 ";
         shared_ids.apply_teacher_change(duplicate);
         const auto unchanged = read_file(shared_storage.path);
-        expect(set_account_password(shared_ids, shared_storage, "Student42", "test", true),
+        expect(set_account_password(shared_ids, shared_storage, "Student42", "Duplicate1!", true),
                ResultCode::DuplicateIdentifier);
         require(read_file(shared_storage.path) == unchanged, "ambiguous account changed file");
+
+        // 旧版数据可能已有中文、空格或较短密码。仍允许验证旧哈希，再换成符合新规则的密码。
+        auto legacy = make_seed_context();
+        const std::string legacy_password = u8" 旧密码 ";
+        char legacy_hash[crypto_pwhash_STRBYTES]{};
+        require(crypto_pwhash_str_alg(legacy_hash, legacy_password.data(), legacy_password.size(),
+            crypto_pwhash_OPSLIMIT_INTERACTIVE, crypto_pwhash_MEMLIMIT_INTERACTIVE,
+            crypto_pwhash_ALG_ARGON2ID13) == 0, "cannot prepare legacy hash");
+        auto legacy_student = legacy.students()[0];
+        legacy_student.password_hash = legacy_hash;
+        legacy.apply_student_change(legacy_student);
+        LoginService legacy_login(legacy, make_stored_password_verifier(legacy));
+        require(legacy_login.login("S2023001", legacy_password).identity.has_value(),
+                "new password rules rejected an existing password");
+        StorageOptions legacy_storage{(root / "legacy.json").string(), false};
+        const UserIdentity legacy_actor{1001, "S2023001", Role::Student};
+        PreparedPasswordChange prepared;
+        expect(prepare_password_change(legacy, legacy_actor, legacy_password,
+                                        "LegacyNew1!", prepared), ResultCode::Success);
+        // 准备哈希后其他业务仍可能修改状态，发布密码时不能把这些修改覆盖掉。
+        auto changed_teacher = legacy.teachers()[0];
+        changed_teacher.name = "Updated during password calculation";
+        legacy.apply_teacher_change(changed_teacher);
+        expect(apply_password_change(legacy, legacy_storage, prepared), ResultCode::Success);
+        require(legacy.teachers()[0].name == changed_teacher.name, "password change lost another update");
+        expect(apply_password_change(legacy, legacy_storage, prepared), ResultCode::InvalidInput);
+        require(legacy_login.login("S2023001", "LegacyNew1!").identity.has_value(),
+                "legacy password could not be changed");
 
         fs::remove_all(root);
         std::cout << "Password service: " << checks << " checks passed\n";

@@ -97,7 +97,9 @@ enum class ResultCode {
     StorageParseError,      // 文件内容不是合法的 state 格式
     StorageSchemaMismatch,  // schema_version 不认识
     StorageIntegrityError,  // 引用缺失、编号重复等数据一致性问题
-    StorageBackupMissing    // 没有可恢复的 .bak 备份
+    StorageBackupMissing,   // 没有可恢复的 .bak 备份
+    // 公共会话检查使用这个结果，和“已登录但没有权限”区分开。
+    AuthenticationRequired
 };
 
 struct OperationResult {

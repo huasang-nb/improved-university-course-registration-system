@@ -53,8 +53,13 @@ powershell -ExecutionPolicy Bypass -File .\run_registration_storage_acceptance.p
 本机密码设置作为暂行方案，最终账号初始化和重置办法仍待讨论，后续可以更换。
 编译、使用步骤及失败处理见 [本机密码设置说明](documentation/local_password_setup.md)。
 
+公共会话与本人改密实现见 [公共 HTTP 接入说明](documentation/session_integration.md)。
+打开 `COURSE_REGISTRATION_WITH_SESSION` 和 libsodium 后，可构建统一登录、当前身份、退出和本人改密 API，
+并使用 `run_session_acceptance.ps1` 验证。`session.hpp` 位于 `header_files`，命名空间为 `course_registration`。
+学生、教师、管理员页面和业务路由尚未在此分支完成共同接入，本轮没有合并其他成员分支。
+
 原班教师停用后，管理员能否继续改该班时间和容量，用户于 11 月 19 日选择继续待讨论。候选版本保留当前允许行为及已有检查，不将其记录为已确认政策；新建班或改派给停用教师仍拒绝。内部数字 ID 跨角色唯一、课程归档/停用、管理员账号维护页面均未在此次整合中扩展。
 
-当前仍是同步单进程业务原型。上线 Web 前须让全部读写入口共同协调并发，完成真实登录、三端页面与浏览器完整流程；本次测试不代表并发或断电耐久性验收。运行数据、临时快照、备份、exe 与 build 目录不进入提交。
+业务采用单进程共享状态。公共 HTTP 入口已提供共同加锁，组员路由仍须按说明接入同一运行对象，并完成三端浏览器流程及整合后的并发回归。本阶段不代表性能或断电耐久性验收。运行数据、临时快照、备份、exe 与 build 目录不进入提交。
 
 接口与运行细节见 [选退课接入](documentation/registration_storage_integration.md)、[管理员接入](documentation/admin_persistence_integration.md) 和 [共享存储](documentation/persistence_integration_guide.md)。
