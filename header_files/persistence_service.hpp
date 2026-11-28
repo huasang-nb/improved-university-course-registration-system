@@ -3,16 +3,12 @@
 // ============================================================================
 // 持久化模块（Zhang Yikai）
 //
-// 把 SystemContext 整体存成一个 JSON 快照，进程退出后重启可以恢复：
-//   * save_state()        先观察"本轮是否已开放"，再校验整份数据，序列化到
-//                         <path>.tmp，备份旧文件为 <path>.bak，最后原子替换；
-//   * load_state()        解析 -> 校验 -> 全部通过后才替换 out_context；
-//   * restore_state()     从 <path>.bak 恢复；恢复时**不覆盖 .bak**，失败可以重试；
-//   * initialize_storage() 文件不存在时用 seed 初始化，写盘成功后才发布；
-//   * validate_state()    按现有业务约束检查整份状态（选退课不重放 enroll）。
-//
-// 所有入口失败时都不修改调用方的 SystemContext。
-// 只依赖标准库（filesystem / fstream），不引入第三方 JSON 库。
+// SystemContext 保存学生、教师和管理员共同使用的数据。
+// 本模块把其中的人员、课程、教学班、规则和选退课记录写入 JSON 文件，供程序下次启动时读取。
+// 读取文件时，会先检查内容是否合法，通过后才替换程序当前使用的数据。
+// 保存文件前，应先复制一份 SystemContext，在副本上修改并保存。
+// 只有保存成功，才把副本放回原来的对象，避免文件保存失败时内存中却已经完成了操作。
+// 文件读写使用标准库中的 filesystem 和 fstream。
 // ============================================================================
 
 #include <string>
@@ -23,43 +19,46 @@
 namespace course_registration {
 
 struct StorageOptions {
-    // 默认放在工作目录的 data/ 下，和 build/ 同级；data/ 进仓库，build/ 不进。
+    // 路径相对于程序运行时的工作目录。默认写入该目录下的 data/state.json。
     std::string path = "data/state.json";
     // 目录不存在时是否创建（默认创建）。
     bool create_dirs = true;
 };
 
-// 启动入口：文件存在则载入，不存在则用 seed 初始化，写盘成功后才发布。
+// 程序启动时调用。如果文件存在，就读取它。如果文件不存在，就创建示例数据并保存。
+// 读取或保存成功后，才替换 out_context 中的数据。
 OperationResult initialize_storage(const StorageOptions& options,
                                    SystemContext& out_context);
 
-// 载入：解析 + 校验 + 构造新的 SystemContext；全部通过才替换 out_context。
+// 读取 JSON 文件，在临时对象中还原各个字段，并检查数据是否合法。
+// 全部通过后，才用读到的数据替换 out_context。失败时保留 out_context 原来的内容。
 OperationResult load_state(const StorageOptions& options,
                            SystemContext& out_context);
 
-// 保存：先 observe_registration_round()，再校验整份状态，最后原子写盘。
-// 副作用：会更新**传入对象**的 round_opened（观察"本轮是否已开放"）。
-// 调用方必须传临时状态（staging）：业务操作和保存都成功后才把 staging 发布为
-// 正式共享状态；失败则丢弃 staging，正式状态保持不变。
-// 失败时不改写文件，也不破坏已有文件与 .bak。
+// 先检查本轮是否已经开放过，更新 context 中的 round_opened 标记，再检查整份数据是否合法。
+// 检查通过后，先把 JSON 内容写到 .tmp 文件，备份仍然有效的旧主文件，再替换主文件。
+// 即使最终保存失败，传进来的 context 的 round_opened 也可能已经变化。
+// 因此处理业务请求时应传入临时副本，等业务操作和文件保存都成功后，再更新原来的对象。
+// 备份在替换主文件之前更新。如果后续步骤失败，主文件仍是旧内容，但 .bak 可能已经变化。
 OperationResult save_state(SystemContext& context, const StorageOptions& options);
 
-// 恢复：从 .bak 载入；成功后用原子替换写回主文件，**不覆盖 .bak**，
-// 因此失败后可以再次恢复。没有 .bak 时返回 StorageBackupMissing。
+// 从 .bak 备份中读取数据，检查通过后写回主文件，再替换 out_context 中的数据。
+// 恢复过程中保留原来的 .bak，所以恢复失败后仍然可以使用它重试。
+// 如果找不到 .bak，就返回 StorageBackupMissing。
 OperationResult restore_state(const StorageOptions& options,
                               SystemContext& out_context);
 
-// 按现有业务入口的规则校验整份状态；problems 为空表示一致。
-// 检查项：课程字段/学分/代码唯一、教学班容量/时间/教师排课冲突、
-//        账号按 normalize_account_key 在角色内与跨角色唯一（含停用账号）、
-//        有效选课不超容量、同一学生同一教学班不重复 active、同课程多班、
-//        学生时间冲突、学分上限（用 long long 累加避免溢出）、
-//        选课规则日期、Active 与 Dropped 引用完整。
-//        同一教学班内部的时段重叠、不同角色相同数字 ID 仍然允许。
+// 检查整份数据，把发现的问题写入 problems。没有问题时，problems 为空并返回 Success。
+// 检查课程字段、学分、课程代码是否重复，以及教学班的容量、上课时间和教师排课是否有效。
+// 检查学生、教师和管理员的账号是否重名。比较前会去掉首尾空白并转成小写，停用账号也要检查。
+// 检查已选人数是否超过容量，学生是否重复选同一班、选同一课程的多个班，或存在课表冲突。
+// 用 long long 计算总学分，检查是否超过上限，并检查选课规则中的日期是否有效。
+// 检查 Active 和 Dropped 记录对应的学生和教学班是否存在。
+// 按现有约定，同一班内部可以有重叠的上课时间，不同角色也可以使用相同的数字 ID。
 OperationResult validate_state(const SystemContext& context,
                                std::vector<std::string>& problems);
 
-// 首次运行 / 测试用的种子数据（与 documentation/interfaces.md 4.1 一致）。
+// 创建首次运行和测试使用的示例数据，内容见 documentation/interfaces.md 的 4.1 节。
 SystemContext make_seed_context();
 
 }  // namespace course_registration

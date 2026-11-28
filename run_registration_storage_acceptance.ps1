@@ -32,7 +32,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Storage integration build failed.' }
 if ($Configuration -eq 'Release') {
     # 两个旧测试依赖 assert；其有效验收使用 Debug，其余测试使用显式检查。
     & $ctestPath --test-dir $buildDirectory -C $Configuration --output-on-failure `
-        -R '^(teacher_and_administration_services|persistence|registration_credit_limit|registration_cross_module_acceptance|registration_storage_integration|persistent_administration|shared_persistence_acceptance|login_service|student_interface|student_empty_and_storage|libsodium_probe)$'
+        -R '^(teacher_and_administration_services|persistence|registration_credit_limit|registration_cross_module_acceptance|registration_storage_integration|persistent_administration|shared_persistence_acceptance|login_service|student_interface|student_empty_and_storage|libsodium_probe|password_service|password_setup_help)$'
 } else {
     & $ctestPath --test-dir $buildDirectory -C $Configuration --output-on-failure
 }

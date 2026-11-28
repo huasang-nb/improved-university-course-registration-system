@@ -132,7 +132,8 @@ endif()
 add_executable(registration_storage_integration_tests
     automated_tests/registration_storage_integration_tests.cpp)
 target_link_libraries(registration_storage_integration_tests
-    PRIVATE persistent_registration_service student_query_and_timetable_services)
+    PRIVATE persistent_registration_service persistent_administration_service
+            student_query_and_timetable_services)
 add_test(NAME registration_storage_integration
     COMMAND registration_storage_integration_tests)
 
@@ -368,6 +369,24 @@ if (COURSE_REGISTRATION_USE_SODIUM)
     add_executable(libsodium_probe automated_tests/libsodium_probe_tests.cpp)
     course_registration_link_sodium(libsodium_probe)
     add_test(NAME libsodium_probe COMMAND libsodium_probe)
+
+    # Zhang Yuhua：真实密码校验和暂行的本机设置工具，复用已有 JSON 保存入口。
+    add_library(password_service source_code/password_service.cpp)
+    target_link_libraries(password_service PUBLIC login_service persistence_service
+                          PRIVATE sodium::sodium)
+    target_compile_options(password_service PRIVATE /W4)
+
+    add_executable(password_setup source_code/password_setup.cpp)
+    target_link_libraries(password_setup PRIVATE password_service)
+    target_compile_options(password_setup PRIVATE /W4)
+    course_registration_link_sodium(password_setup)
+    add_test(NAME password_setup_help COMMAND password_setup --help)
+
+    add_executable(password_service_tests automated_tests/password_service_tests.cpp)
+    target_link_libraries(password_service_tests
+        PRIVATE password_service persistent_registration_service)
+    course_registration_link_sodium(password_service_tests)
+    add_test(NAME password_service COMMAND password_service_tests)
 
     message(STATUS
         "libsodium: 官方动态包 x64/v143/dynamic（Debug/Release 文件齐全，链接检查通过）")
