@@ -35,7 +35,14 @@ void register_teacher_admin_routes(httplib::Server& server, Services& services,
                                   SessionLookup lookup);
 
 // 没有会话骨架时的重载：所有请求按未登录处理（冒烟测试用）。
+// 注意：它会先拿本模块自己的锁再调 dispatch()，正式服务器不要用它。
 void register_teacher_admin_routes(httplib::Server& server, Services& services);
+
+// 接入组长公共会话骨架（session.hpp）后的注册入口，只在
+// COURSE_REGISTRATION_WITH_SESSION=ON 时编译：
+//   require_session() -> require_csrf() -> with_business_lock() -> dispatch()
+// 锁由 with_business_lock() 持有，本入口不会再重复加锁。
+void register_teacher_admin_routes_with_session(httplib::Server& server);
 
 }  // namespace http
 }  // namespace course_registration

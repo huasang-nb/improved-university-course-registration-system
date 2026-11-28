@@ -182,6 +182,24 @@ if (WIN32)
         source_code/http_teacher_admin_dev_server.cpp)
     target_link_libraries(http_teacher_admin_dev_server
         PRIVATE http_teacher_admin_routes ws2_32)
+
+    # 接入组长公共会话骨架（session.hpp）后的正式路由入口。
+    # 默认关闭：session.hpp 尚未进入仓库，打开前需要把它的目录加进 include。
+    option(COURSE_REGISTRATION_WITH_SESSION
+        "Build the team session adapter (requires Yuhua's session.hpp)" OFF)
+    if (COURSE_REGISTRATION_WITH_SESSION)
+        add_library(http_teacher_admin_session_routes
+            source_code/http_teacher_admin_session_routes.cpp)
+        target_link_libraries(http_teacher_admin_session_routes
+            PUBLIC http_teacher_admin_routes ws2_32)
+        target_include_directories(http_teacher_admin_session_routes
+            PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/session)
+        if (MSVC)
+            target_compile_options(http_teacher_admin_session_routes PRIVATE /W4)
+        else()
+            target_compile_options(http_teacher_admin_session_routes PRIVATE -Wall -Wextra)
+        endif()
+    endif()
 endif()
 
 if (MSVC)

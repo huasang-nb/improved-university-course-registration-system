@@ -175,6 +175,12 @@ ctest --test-dir build\cmake -C Debug --output-on-failure
   未知字段、64 KiB 上限、URL 与正文编号不一致，以及“写入成功后重新载入仍一致”。
 - 本地联调：`http_teacher_admin_dev_server.exe --role admin --id 900`（仅本机、
   不做密码校验，产品入口仍由组长提供）。
+- 公共会话骨架对接：`source_code/http_teacher_admin_session_routes.cpp`
+  （`-DCOURSE_REGISTRATION_WITH_SESSION=ON`，需要张宇华的 `session.hpp`），
+  调用链 `require_session()` → `require_csrf()` → `with_business_lock()` → `dispatch()`，
+  401/403/409/500 的职责划分见 `documentation/http_teacher_admin_routes.md` 第 4 节。
+- 修改本人密码：页面已预留入口，统一调 `PUT /api/auth/password`；密码的生成、校验与改密
+  公共服务由张宇华负责，本模块不生成哈希、不保存密码。
 - 契约与确认项：`documentation/decisions/0001-http-contract.md`。
 
 本轮 ctest 7/7（新增 `http_teacher_admin`），Debug 与 Release 各一轮。

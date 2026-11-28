@@ -49,8 +49,10 @@ struct Response {
 
 // handler 层依赖的共享对象。三者由公共骨架在启动时构造一次，
 // 生命周期覆盖整个服务运行期。
+// context 只读：handler 不直接改共享状态，写操作一律走 admin/teacher 服务，
+// 这样“保存成功才生效”的网关不会被绕过。
 struct Services {
-    SystemContext& context;
+    const SystemContext& context;
     PersistentAdministratorService& admin;
     TeacherService& teacher;
     std::mutex& business_mutex;

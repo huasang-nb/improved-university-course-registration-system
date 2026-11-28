@@ -135,89 +135,81 @@ register_teacher_admin_routes(server, services,
   - 教师：`GET /api/teacher/classes` 200 只含本人班；`GET /classes/20/roster`
     403 `PermissionDenied`；管理员身份访问教师路由 403。
 
-## 8. 修改我的密码（入口已预留）
+## 8. 修改我的密码（入口已预留，服务由张宇华提供）
 
-密码的初始化、校验与改密由 Zhu Ziliang 负责的公共接口提供，三个角色共用一套流程；
-教师页与管理员页只预留入口，不自行保存任何密码。
+密码的生成、校验与本人改密由**张宇华**负责的公共服务提供（Argon2id），三个角色共用一套流程；
+本模块只在教师页与管理员页提供入口，不生成哈希、不保存任何密码。
 
 - 页面位置：`web/teacher.html`、`web/admin.html` 顶栏的“修改我的密码”按钮，
   打开 `web/shared/app.js` 里的同一个弹窗（当前密码、新密码、确认新密码）。
+  三个角色都调同一条接口，服务器按会话确定改谁的密码，不接受前端指定其他账号。
 - 调用契约：`PUT /api/auth/password`，正文
-  `{"current_password": "...", "new_password": "..."}`。
-  成功 200；当前密码错误 400 `InvalidInput`；未登录或会话失效 401；
-  新密码过短等规则由服务端判定并返回 400。
-- 前端只做三项本地校验：必填、两次新密码一致、新密码至少 8 位；
-  其余规则以服务端返回为准。
+  `{"current_password": "...", "new_password": "..."}`，需要有效会话与 `X-CSRF-Token`。
+  成功 200；当前密码错误 400 `InvalidInput`；未登录或会话失效 401；新密码过短等规则由服务端判定并返回 400。
+- 前端只做三项本地校验：必填、两次新密码一致、新密码至少 8 位；其余规则以服务端返回为准。
+- 改密成功后服务端会撤销该账号的全部旧会话（含当前会话）：页面提示“密码已修改，请用新密码
+  重新登录”并刷新回登录页，不假装仍处于登录状态。保存失败时旧密码与原会话保持不变。
 - 公共接口尚未上线时（404/501），页面提示“改密接口尚未接入”，不会假装保存成功。
 - 未做（另一项确认）：管理员替学生/教师重置忘记的密码、是否强制首次登录改密；
   管理员人员列表里的“重置他人密码”按钮保持缺席。
 
-## 9. 与 session 骨架对接（按 Yuhua 的声明草案）
+## 9. 与公共会话骨架对接（已按 2026-11-28 方案对齐）
 
-Yuhua 的草案提供五组入口：`require_session()`、`require_csrf()`、`with_business_lock()`、
-`LockedServices`、`write_result()`。本模块按下面的方式接：
+公共骨架提供：`require_session()`、`require_csrf()`、`with_business_lock()`、`LockedServices`、
+`write_result()`，类型与函数都在 `course_registration` 命名空间，头文件 `session.hpp`。
+本模块的正式接入代码在 `source_code/http_teacher_admin_session_routes.cpp`，由
+`COURSE_REGISTRATION_WITH_SESSION=ON` 打开：
 
-- `dispatch()` 不再自己加锁，调用方必须已持锁（`dispatch_locked()` 仅供独立服务器与自测）。
-- 会话/CSRF 失败直接交给 `write_result()`，用 `ResultSource` 区分 401 与 403：
-  `Session` → 401，`Csrf` → 403 `CsrfRejected`，`Permission` → 403 `PermissionDenied`，
-  `Business` → `status_for()`。
-- 锁内再查一次身份由 `with_business_lock()` 负责；本模块 `require_role()` 里的重查保留为兜底。
-- 响应数据逐字段挑选（`student_json`/`teacher_json` 等），即使拿到含哈希的
-  `context_snapshot()` 也不会整对象输出。
+- 调用链：`require_session()` → `require_csrf()`（仅写方法）→ `with_business_lock()` → `dispatch()`。
+- `dispatch()` 不自己加锁，调用方必须已持锁；`dispatch_locked()` 只留给独立服务器与自测，
+  正式服务器不会再调它，避免同一把锁被重复获取。
+- 失败映射：
 
-适配代码（替换 `register_teacher_admin_routes` 的两个参数重载）：
+  | 情况 | 状态码 | `code` |
+  |---|---|---|
+  | 无 Cookie、会话过期、账号停用/删除、账号不匹配 | 401 | `AuthenticationRequired` |
+  | 角色不符 | 403 | `PermissionDenied` |
+  | CSRF 缺失或不匹配 | 403 | `CsrfRejected` |
+  | 业务冲突（满班、重号、容量不足、有选课记录等） | 409 | 原 `ResultCode` 名 |
+  | 参数问题 | 400 | `InvalidInput` |
+  | 记录不存在 | 404 | `RecordNotFound` 等 |
+  | 存储失败、内部异常 | 500 | `Storage*` |
+
+- 锁内读取用新增的 `LockedServices::context()`（`const SystemContext&`），
+  `context_snapshot()` 保留给需要在锁外继续处理的情况；离开回调前把要保留的数据复制走，
+  响应只逐字段挑选（`student_json`/`teacher_json` 等），不含密码哈希。
+- `with_business_lock()` 的返回值只表示加锁后的身份 / 角色检查是否通过，不替代回调里的业务结果
+  （满班仍由业务结果给 409）。
+- 会话口径：空闲 30 分钟、登录后最长 8 小时；只有通过身份检查的 API 请求才刷新空闲时间，
+  静态页面与图片不续期，最长时限从登录成功起算。
+
+接入代码的核心部分：
 
 ```cpp
-void register_teacher_admin_routes(httplib::Server& server, Services& services) {
-    const auto handler = [&services](const httplib::Request& raw, httplib::Response& out) {
-        const SessionCheck session = require_session(raw);
-        if (!session.identity) {
-            write_result(out, session.result, ResultSource::Session);   // 401
-            return;
-        }
-        const bool write = raw.method != "GET";
-        if (write) {
-            const OperationResult csrf = require_csrf(raw);
-            if (csrf.code != ResultCode::Success) {
-                write_result(out, csrf, ResultSource::Csrf);            // 403 CsrfRejected
-                return;
-            }
-        }
-        http::Request request = to_request(raw);
-        request.identity = session.identity;
-        request.csrf_ok = write;
-
-        const Role role = request.path.rfind("/api/admin/", 0) == 0
-                              ? Role::Administrator
-                              : Role::Teacher;
-        http::Response result;
-        const OperationResult locked = with_business_lock(
-            *session.identity, role,
-            [&](LockedServices&) { result = http::dispatch(request, services); });
-        if (locked.code != ResultCode::Success) {
-            write_result(out, locked, ResultSource::Permission);        // 403
-            return;
-        }
-        out.status = result.status;
-        out.set_content(result.body, "application/json; charset=utf-8");
-    };
-
-    server.Get(R"(/api/(teacher|admin)/.*)", handler);
-    server.Post(R"(/api/(teacher|admin)/.*)", handler);
-    server.Put(R"(/api/(teacher|admin)/.*)", handler);
-    server.Patch(R"(/api/(teacher|admin)/.*)", handler);
-    server.Delete(R"(/api/(teacher|admin)/.*)", handler);
+const SessionCheck session = require_session(raw);
+if (!session.identity) { write_result(out, session.result, ResultSource::Session); return; }  // 401
+if (is_write_method(raw.method)) {
+    const OperationResult csrf = require_csrf(raw);
+    if (csrf.code != ResultCode::Success) { write_result(out, csrf, ResultSource::Csrf); return; }  // 403
+}
+http::Response response;
+const OperationResult locked = with_business_lock(*session.identity, role_for_path(raw.path),
+    [&](LockedServices& locked) {
+        std::mutex unused;
+        Services services{locked.context(), locked.admin_service(), locked.teacher_service(), unused};
+        response = dispatch(request, services);
+    });
+if (locked.code != ResultCode::Success) {
+    const ResultSource source = locked.code == ResultCode::PermissionDenied
+                                    ? ResultSource::Permission     // 403
+                                    : ResultSource::Session;       // 401
+    write_result(out, locked, source);
+    return;
 }
 ```
 
-需要 Yuhua 明确的点：
-
-1. `session` 的头文件名与实现文件（我这边按 `session.hpp` 预留 include）。
-2. `with_business_lock()` 的 `fn` 返回类型：上面按“返回 `void`、结果通过捕获写回”使用；
-   若 `fn` 需要返回 `OperationResult`，我可以改成直接返回 `result`。
-3. `require_session()` 是否顺带续期空闲时间（30 分钟口径需要在这里落实）。
-4. `LockedServices` 是否也需要暴露“当前 `SystemContext&` 的只读引用”；
-   当前我用外部 `Services&` 指向真实对象，`context_snapshot()` 只在需要完全隔离的读路径使用。
+对现有代码的影响只有一处：`http::Services::context` 从 `SystemContext&` 改成 `const SystemContext&`，
+handler 只读、写操作一律走服务，编译期就能阻止绕过持久化网关的写入。
 
 ## 10. 已知限制
 

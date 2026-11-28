@@ -256,7 +256,10 @@
           new_password: next,
         });
         close();
-        toast("密码已修改");
+        // 改密成功后服务端会撤销该账号的全部旧会话（含当前这一个），
+        // 所以这里不做“原地继续使用”，回到登录页重新认证。
+        toast("密码已修改，请用新密码重新登录");
+        setTimeout(() => window.location.reload(), 1200);
       } catch (error) {
         if (
           error.status === 404 ||

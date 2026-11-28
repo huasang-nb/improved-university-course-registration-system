@@ -63,13 +63,20 @@
 结论：表 6 的 21 条管理员路由与 3 条教师路由全部实现，无遗漏、无额外路径。
 不实现的相邻路径：`/api/courses`、`/api/classes/{id}/seats`、`/api/me/*`（学生侧，Kai / Yuhua），`/api/auth/*`（登录，Yuhua）。
 
-## 4. 公共接口待对齐点（Yuhua 的 session 草案）
+## 4. 公共接口对齐结果（2026-11-28，按组长方案）
 
-1. 头文件名与命名空间（我按 `session.hpp`、全局作用域预留）。
-2. `with_business_lock()` 中 `fn` 的返回类型：我按 `void` + 捕获 `Response` 使用；
-   若要求返回 `OperationResult`，回调内业务失败与锁失败需要可区分。
-3. `require_session()` 是否顺带续期空闲时间（30 分钟口径依赖这一点），
-   “无 Cookie”和“会话过期/账号停用”是否都返回 401 `AuthenticationRequired`。
-4. `require_csrf()` 对 GET 是否 no-op；失败时 `ResultSource::Csrf` 对应 403 `CsrfRejected`。
-5. `context_snapshot()` 拷贝整份数据（含哈希）：我在锁内直接用真实引用转换 JSON，
-   只在需要脱离锁的只读路径使用快照。
+| 待对齐点 | 采用 |
+|---|---|
+| 头文件与命名空间 | `session.hpp`，类型与函数放在 `course_registration` 命名空间 |
+| `with_business_lock()` 回调返回类型 | 返回 `void`，业务响应用捕获变量带出；它返回的 `OperationResult` 只表示加锁后的身份 / 角色检查，不替代回调里的业务结果（满班仍是 409） |
+| 持锁后的失败映射 | 停用 / 删除 / 账号不匹配 → 401 `AuthenticationRequired`；角色不符 → 403 `PermissionDenied`；业务冲突保持 409；内部异常 500 |
+| `require_session()` 的续期 | 只有通过检查的 API 请求才刷新空闲时间；静态页面与图片不续期；最长 8 小时从登录成功起算、不延长 |
+| `require_csrf()` | GET / HEAD / OPTIONS 直接通过；写操作（含退出登录、改密）必查；登录接口单独处理 |
+| `context_snapshot()` | 保留给锁外只读；锁内改用新增的 `LockedServices::context()` 直接读取，离开回调前把要保留的数据复制走，响应不含密码哈希 |
+| 加锁位置 | 正式路由在锁内调用 `dispatch()`；`dispatch_locked()` 只留给独立服务器与自测，避免重复加锁 |
+
+对应的接入代码在 `source_code/http_teacher_admin_session_routes.cpp`（`COURSE_REGISTRATION_WITH_SESSION=ON`
+时编译），调用链是 `require_session()` → `require_csrf()` → `with_business_lock()` → `dispatch()`。
+
+密码相关的公共服务（Argon2id 生成、校验、本人改密）由**张宇华**负责；本模块只在页面提供入口，
+`PUT /api/auth/password` 的会话撤销与会话语义也以公共实现为准。
