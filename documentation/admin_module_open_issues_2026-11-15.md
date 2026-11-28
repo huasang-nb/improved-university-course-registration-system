@@ -96,3 +96,13 @@ OperationResult create_course_with_teaching_class(
   其中包含 `persistent_administration`。
 - 证据与命令：`documentation/admin_test_evidence_2026-11-19.txt`、
   `documentation/admin_persistence_integration.md`。
+
+## 8. 后续更新（2026-11-29，第 4 周）
+
+- 失败路径验收（容量调整、已有选课记录、重复账号、无效时段、越权访问）已补齐，
+  见 `documentation/admin_failure_matrix_2026-11-29.md` 与
+  `documentation/admin_failure_acceptance_evidence_2026-11-29.txt`。
+- 本轮修掉两个缺陷：只剩 Dropped 记录时仍可改教学班的 `course_id`（改写历史）、
+  课程代码查重未去首尾空白。管理员测试 483 → 505 项，新增失败路径验收 309 项。
+- 第 2 节“停用教师”相关口径不变：可选列表过滤与选课入口拒绝仍是
+  “已确认，待实现和联调”，原班教师停用后改时间/容量仍是“待讨论”。

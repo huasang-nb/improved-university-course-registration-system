@@ -4,7 +4,7 @@
 
 本项目是 Team 4 的软件工程课程小组项目，面向学生、教师和管理员，提供课程查询、选课退课、个人课表、教学班查询及课程管理等功能。
 
-当前为**第一周 C++ 内存业务原型的三人阶段整合版本**，状态更新于 **2026 年 11 月 6 日**。已接入三人的核心业务模块、控制台演示和自动化测试；完整网页、登录认证和数据持久化尚未完成。
+当前为**三人阶段整合后的管理员模块加固版本**，状态更新于 **2026 年 11 月 29 日**。已接入三人的核心业务模块、控制台演示和六套自动化测试；管理员模块的持久化、凭据保留、失败路径验收与 libsodium 构建约束已完成。完整网页、登录认证仍未接入。
 
 ## 团队分工
 
@@ -47,12 +47,12 @@
 ```text
 header_files/        选课规则、教师管理员、学生查询的结构与接口声明
 source_code/         三个业务模块实现及各自的控制台演示
-automated_tests/     三套业务测试
-documentation/      接口说明、变更说明和测试资料
+automated_tests/     六套业务与持久化测试（含第 4 周失败路径验收）
+documentation/      接口说明、变更说明、失败矩阵和测试资料
 docs/task3/         Task 3 图、可编辑源文件与配套说明
 weekly/             阶段开发记录
-build_and_test.ps1   编译全部测试与演示，并运行三套测试
-CMakeLists.txt      可选的 CMake 构建配置
+build_and_test.ps1   编译全部测试与演示，并运行当前环境可用的测试
+CMakeLists.txt       CMake 构建配置（MSVC 2022 或 g++）
 README.md           项目概况、运行方法与当前状态
 ```
 
@@ -63,40 +63,46 @@ README.md           项目概况、运行方法与当前状态
 ### 环境要求
 
 - Windows PowerShell。
-- 支持 C++17 的 g++，并确保终端能执行 `g++ --version`。脚本也支持通过环境变量 `CXX` 指定编译器路径。
-- 当前通过项目脚本直接编译，不要求安装 CMake。
+- 目标编译器 **MSVC 2022（19.40+）+ CMake 3.21+**：持久化相关的两个测试用到
+  `<filesystem>`，MinGW GCC 8 在 Windows 上会因 `path` 的宽字符类型编译失败，
+  所以完整 6 个测试请用 CMake + Visual Studio 2022 生成器。
+- 只想跑业务逻辑（不含持久化）时，`g++`（GCC 8.1+）也够用：`build_and_test.ps1`
+  会自动跳过在此环境下无法编译的持久化目标。
 
-在项目根目录打开 PowerShell，执行：
+### 推荐：CMake + MSVC 2022（全部 6 个测试）
+
+```powershell
+cmake -S . -B build\cmake -G "Visual Studio 17 2022" -A x64
+cmake --build build\cmake --config Debug
+ctest --test-dir build\cmake -C Debug --output-on-failure
+```
+
+预期 6/6 通过：`course_registration_business_rules`、`teacher_and_administration_services`、
+`student_query_and_timetable`、`persistence`、`persistent_administration`、
+`admin_failure_acceptance`（第 4 周的失败路径验收，309 项检查）。
+
+需要密码哈希（Argon2id）时按 `documentation/account_onboarding_and_libsodium_build.md`
+开启 `-DCOURSE_REGISTRATION_USE_SODIUM=ON`，验收范围仅限 Windows x64 + MSVC 2022
+官方**动态**包。
+
+### 备选：g++ 脚本（业务逻辑部分）
 
 ```powershell
 .\build_and_test.ps1
 ```
 
-脚本会创建 `build` 目录，编译三套测试和三个演示程序，再运行三套测试。全部通过时返回退出码 `0`，并输出：
+脚本会创建 `build` 目录，编译各测试与演示程序并运行可用的测试，全部通过时返回
+退出码 `0`。当前各套件的检查数：教师与管理员 505 项、管理员持久化 134 项、
+失败路径验收 309 项；业务规则、学生查询与课表、持久化三套以“全部通过”为结果，
+不单独打印计数（后两套中的持久化目标需要 MSVC 才能编译）。
 
-```text
-All registration tests passed
-PASS: 326 checks, 0 failure(s)
-All student query and timetable tests passed
-ALL BUILD AND TESTS PASSED
-```
-
-`326` 是当前教师管理员测试的检查数，后续增加测试后可能变化。
-
-编译完成后，可分别运行：
+### 演示程序
 
 ```powershell
-# 选课与退课演示
-.\build\course_registration_console_demonstration.exe
-
-# 教师、管理员及选退课联动演示
-.\build\teacher_and_administration_demonstration.exe
-
-# 学生搜索、余量和课表演示
-.\build\student_query_demonstration.exe
+.\build\course_registration_console_demonstration.exe      # 选课与退课
+.\build\teacher_and_administration_demonstration.exe       # 教师、管理员及选退课联动
+.\build\student_query_demonstration.exe                    # 学生搜索、余量与课表
 ```
-
-项目同时保留 `CMakeLists.txt`，但本次验收使用上述 g++ 脚本，尚未验证 CMake 构建流程。
 
 ## 本次整合与验证
 
@@ -133,12 +139,33 @@ ALL BUILD AND TESTS PASSED
 
 010 的第一轮修复仍可通过改期绕过；本次在覆盖旧时段前先保存已开放事实，覆盖后再观察新时段，相关回归测试通过。首次开放后拒绝修改上限，既有选课记录保持不变。学分上限的具体数值仍由项目需求及配置决定，演示中的数字不代表固定业务要求。
 
+## 第 4 周（11/23–11/29）失败路径验收与修复
+
+按手册要求覆盖容量调整、已有选课记录、重复账号、无效时段、越权访问五类失败场景，
+共 309 项检查；每个被拒操作都断言返回码、可读消息，并比对操作前后的
+`SystemContext` 全量快照，确认“失败不破坏原数据”。
+
+- 场景清单与口径：[管理员模块失败矩阵](documentation/admin_failure_matrix_2026-11-29.md)
+- 运行输出：[失败路径验收证据](documentation/admin_failure_acceptance_evidence_2026-11-29.txt)
+
+本轮测试新发现并修复两个缺陷：
+
+| 编号 | 问题 | 当前状态 |
+| --- | --- | --- |
+| 011 | 只剩 Dropped 记录时仍可把教学班改挂到别的课程，历史选课随之改写 | 已修复，`dropped > 0` 时拒绝改 `course_id`；旧用例改为断言拒绝，并补“无记录班级可改课程”正例 |
+| 012 | 课程代码查重只做小写转换、不去首尾空白，`" se101 "` 可绕过 `"SE101"` | 已修复，查重改用 `normalize_account_key()`，与账号规则一致；删除不再使用的 `to_lower` |
+
+验收结果（MSVC 2022 / CMake 3.30.5，Debug 与 Release 各一轮）：
+`ctest` 6/6；失败路径验收 309 项、教师与管理员 505 项、管理员持久化 134 项全部通过。
+
 ## 后续工作
 
 1. 维护现有回归测试，后续接口或业务规则变更时同步更新文档。
-2. 接入登录、账号状态校验及可信的用户身份。
-3. 接入网页和请求入口，验证三类用户的完整操作流程。
-4. 增加数据持久化，解决程序退出后内存数据不保存的问题。
+2. 接入登录、账号状态校验及可信的用户身份（组长负责），把权限规则接到登录结果上。
+3. 接入网页和请求入口，验证三类用户的完整操作流程；管理员模块的失败结果目前以
+   `OperationResult` 返回，由调用方负责呈现。
+4. 学生可选列表过滤停用教师、选课入口拒绝停用教师班级：已确认，待实现和联调；
+   原班教师停用后能否改时间/容量仍待讨论（当前实现允许）。
 5. 每周向组织仓库同步复核后的阶段成果，并更新测试、缺陷与开发记录。
 
 Task 3 中 Zhu 的图与说明见 [图清单](docs/task3/FIGURES.md)，Yikai 的图、源文件和说明见 [member_b](docs/task3/member_b/README.md)。已有文档和图仍需随实际接口变更同步维护。

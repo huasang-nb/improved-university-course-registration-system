@@ -1,0 +1,76 @@
+﻿Week 4 (2026-11-23 .. 2026-11-29) failure-path acceptance evidence
+Collected: 2026-11-29, machine: MSI_NB (Windows, x64)
+Branch: feature/zhu-ziliang-admin-persistence
+
+Compilers used
+  * MSVC 19.43.34809.0 (Visual Studio 2022 Community, 14.43.34808), CMake 3.30.5 + Visual Studio 17 2022 generator
+  * MinGW-W64 g++ 8.1.0 (x86_64-posix-seh) for the single-binary suites
+    NOTE: this g++ cannot compile the std::filesystem based persistence targets
+    (GCC 8 on Windows exposes a wchar_t path, ifstream(path) fails); the
+    persistence suites are therefore verified with MSVC only.
+
+1) cmake --build build/cmake-week4 --config Debug    -> exit 0
+2) ctest --test-dir build/cmake-week4 -C Debug
+Internal ctest changing into directory: C:/Users/MSI_NB/Desktop/deepseek_harness_工作文件夹/improved-university-course-registration-system/build/cmake-week4
+Test project C:/Users/MSI_NB/Desktop/deepseek_harness_工作文件夹/improved-university-course-registration-system/build/cmake-week4
+    Start 1: course_registration_business_rules
+1/6 Test #1: course_registration_business_rules ....   Passed    0.10 sec
+    Start 2: teacher_and_administration_services
+2/6 Test #2: teacher_and_administration_services ...   Passed    0.11 sec
+    Start 3: student_query_and_timetable
+3/6 Test #3: student_query_and_timetable ...........   Passed    0.10 sec
+    Start 4: persistence
+4/6 Test #4: persistence ...........................   Passed    0.18 sec
+    Start 5: persistent_administration
+5/6 Test #5: persistent_administration .............   Passed    0.19 sec
+    Start 6: admin_failure_acceptance
+6/6 Test #6: admin_failure_acceptance ..............   Passed    0.11 sec
+
+100% tests passed, 0 tests failed out of 6
+
+Total Test time (real) =   0.80 sec
+
+3) cmake --build build/cmake-week4 --config Release  -> exit 0
+4) ctest --test-dir build/cmake-week4 -C Release
+Internal ctest changing into directory: C:/Users/MSI_NB/Desktop/deepseek_harness_工作文件夹/improved-university-course-registration-system/build/cmake-week4
+Test project C:/Users/MSI_NB/Desktop/deepseek_harness_工作文件夹/improved-university-course-registration-system/build/cmake-week4
+    Start 1: course_registration_business_rules
+1/6 Test #1: course_registration_business_rules ....   Passed    0.10 sec
+    Start 2: teacher_and_administration_services
+2/6 Test #2: teacher_and_administration_services ...   Passed    0.10 sec
+    Start 3: student_query_and_timetable
+3/6 Test #3: student_query_and_timetable ...........   Passed    0.10 sec
+    Start 4: persistence
+4/6 Test #4: persistence ...........................   Passed    0.14 sec
+    Start 5: persistent_administration
+5/6 Test #5: persistent_administration .............   Passed    0.16 sec
+    Start 6: admin_failure_acceptance
+6/6 Test #6: admin_failure_acceptance ..............   Passed    0.10 sec
+
+100% tests passed, 0 tests failed out of 6
+
+Total Test time (real) =   0.71 sec
+
+5) admin_failure_acceptance_tests.exe (MSVC Debug)
+admin failure acceptance tests (week 4)
+-- capacity adjustment
+-- existing enrollment records
+-- duplicate accounts
+-- invalid time slots
+-- privilege boundaries
+PASS: 309 checks, 0 failure(s)
+
+6) teacher_and_administration_services_tests.exe (MSVC Debug), regression after the two fixes
+PASS: 505 checks, 0 failure(s)
+
+7) admin_failure_acceptance_tests built with MinGW g++ 8.1.0 (-Wall -Wextra, no warnings)
+   g++ -std=c++17 -Wall -Wextra -Iheader_files source_code/course_registration_business_rules.cpp
+       source_code/teacher_and_administration_services.cpp
+       automated_tests/admin_failure_acceptance_tests.cpp -o build/acceptance.exe
+admin failure acceptance tests (week 4)
+-- capacity adjustment
+-- existing enrollment records
+-- duplicate accounts
+-- invalid time slots
+-- privilege boundaries
+PASS: 309 checks, 0 failure(s)
