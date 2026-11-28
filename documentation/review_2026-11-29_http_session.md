@@ -111,7 +111,28 @@ http::register_teacher_admin_routes_with_session(server);   // 本模块只注�
 合法管理员建课程成功且重新 `load_state` 一致；业务拒绝（删最后一个班）409 且文件不变；
 内部异常 500 且不出现“请重新登录”。
 
-## 5. 仍需你配合 / 未完成
+## 5. 复核项与提交对应
+
+本轮分支 `feature/zhu-http-teacher-admin`，HEAD `cd32606`（`b0ada2d` 之后只加了一个测试与文档提交）。
+每一项都能单独指到提交和验证方式：
+
+| 复核项 | 提交 | 验证 |
+|---|---|---|
+| 一、改密弹窗拼接 | `b0ada2d` | `web/tests/app_text_test.js` 18 项（求值模板表达式，断言三个输入框与保存/取消按钮存在）+ 手动打开/输入/保存/取消/Escape/点背景/重复打开 |
+| 二、教室文本转义 | `b0ada2d` | 同上前端回归（`<b>TestRoom</b>`、引号、`&`、`>` 只显示文字）；管理员教学班列表、教师教学班列表、教师班级详情三处 |
+| 三、锁内失败映射 | `b0ada2d` | `test_result_source_mapping`（7 个码逐个断言）+ 端到端 `test_deactivated_session`（锁内停用返回 401，不是 500 `InternalError`） |
+| 四、保存失败脱敏 | `b0ada2d` | 端到端 `test_save_failure_is_sanitized`：占用主文件 → 500 `StorageIoError`，响应不含 `state.json`/`C:`/`:\\`，内存未被替换，解除后重试成功 |
+| 五、重复 JSON 字段 | `b0ada2d` | 端到端 `test_duplicate_json_field`：`{"capacity":0,"capacity":2}` → 400 `InvalidInput`，容量仍为 2 |
+| 六、正式会话联调 | `b0ada2d` | `http_team4_integration_tests` 166 项：401/403/CSRF/保存落盘/业务拒绝不改数据/内部异常 500 不显示为登录失败/改密与撤销旧会话 |
+| 会话字段形状 | `cd32606` | `test_me_shape`：三种角色各查一次 `data.user.role`/`user_id`/`account_number`、`data.csrf_token`，并验证 Token 带与不带时的 403 `CsrfRejected` / 200 `Success` |
+
+版本与验证结果：MSVC 2022，`COURSE_REGISTRATION_USE_SODIUM=ON` 与
+`COURSE_REGISTRATION_WITH_SESSION=ON`，Debug 与 Release 各 **19/19**；本条记录对应 HEAD `cd32606`。
+
+未验证事项（按约定留到整合阶段）：三端页面在浏览器里的完整流程（改密弹窗只做脚本级回归 + 手动验证），
+以及接通共同服务器后的端到端走查。
+
+## 6. 仍需你配合 / 未完成
 
 - **`/api/auth/me` 的字段名（已定，2026-11-28）**：`data.user.role` 为
   `Student` / `Teacher` / `Administrator`，`data.user.user_id` 为整数，
