@@ -84,6 +84,8 @@ public:
     // 包含匹配；没有匹配时返回 Success + 空列表，由界面给出“没有匹配课程”。
     // 关键词靠教师姓名命中时，只算命中那一位老师的教学班；再叠教师筛选，
     // 两者必须是同一个班，不同班的组合不会返回。
+    // 这是“可选课程”列表：只返回教师仍启用（account_active）的教学班；
+    // 课程没有可选班时不返回。本人已有选课/课表请用 view_timetable()。
     OperationResult search_courses(const std::string& keyword,
                                    const CourseSearchFilter& filter,
                                    std::vector<CourseView>& result) const;

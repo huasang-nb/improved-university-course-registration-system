@@ -1,4 +1,4 @@
-﻿# 编译并运行全部测试（Zhu Ziliang）
+﻿﻿# 编译并运行全部测试（Zhu Ziliang）
 # 用法：.\build_and_test.ps1
 # 需要支持 C++17 的 g++（GCC 8.1+；持久化目标会自动追加 -lstdc++fs）。
 # 全部测试通过时脚本返回 0，任一测试失败返回 1。
@@ -78,6 +78,28 @@ $targets = @(
         Sources = @("source_code/course_registration_business_rules.cpp",
                     "source_code/teacher_and_administration_services.cpp",
                     "automated_tests/admin_failure_acceptance_tests.cpp")
+    },
+    @{
+        Name = "student_interface_demonstration"
+        Sources = @("source_code/course_registration_business_rules.cpp",
+                    "source_code/teacher_and_administration_services.cpp",
+                    "source_code/student_query_and_timetable_services.cpp",
+                    "source_code/persistence_service.cpp",
+                    "source_code/persistent_registration_service.cpp",
+                    "source_code/student_interface.cpp",
+                    "source_code/student_interface_demonstration.cpp")
+        Extra = @("-lstdc++fs")
+    },
+    @{
+        Name = "student_interface_tests"
+        Sources = @("source_code/course_registration_business_rules.cpp",
+                    "source_code/teacher_and_administration_services.cpp",
+                    "source_code/student_query_and_timetable_services.cpp",
+                    "source_code/persistence_service.cpp",
+                    "source_code/persistent_registration_service.cpp",
+                    "source_code/student_interface.cpp",
+                    "automated_tests/student_interface_tests.cpp")
+        Extra = @("-lstdc++fs")
     }
 )
 
@@ -109,7 +131,8 @@ $tests = @("course_registration_business_rules_tests",
            "student_query_and_timetable_tests",
            "persistence_tests",
            "persistent_administration_tests",
-           "admin_failure_acceptance_tests")
+           "admin_failure_acceptance_tests"),
+           "student_interface_tests")
 foreach ($test in $tests) {
     if (-not $built.ContainsKey($test)) {
         Write-Host ("`n=== skip " + $test + " (not built) ===") -ForegroundColor Yellow

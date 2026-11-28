@@ -17,3 +17,8 @@ __pycache__/
 http-dev-runtime/
 http-test-runtime/
 data/http-dev-state.json
+# 本地运行状态及其临时文件、备份（示例 JSON 请使用单独文件名）
+/data/state.json
+/data/state.json.tmp
+/data/state.json.bak
+/data/*.password.lock

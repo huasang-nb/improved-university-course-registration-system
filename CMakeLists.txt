@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD 17)
 if (MSVC)
     add_compile_options(/utf-8)
 endif()
+
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_library(course_registration_business_rules source_code/course_registration_business_rules.cpp)
@@ -35,12 +36,17 @@ add_executable(teacher_and_administration_services_tests
 target_link_libraries(teacher_and_administration_services_tests PRIVATE teacher_and_administration_services)
 add_test(NAME teacher_and_administration_services COMMAND teacher_and_administration_services_tests)
 
+add_library(login_service source_code/login_service.cpp)
+target_link_libraries(login_service PUBLIC teacher_and_administration_services)
+
 if (MSVC)
     target_compile_options(course_registration_business_rules PRIVATE /W4)
     target_compile_options(teacher_and_administration_services PRIVATE /W4)
+    target_compile_options(login_service PRIVATE /W4)
 else()
     target_compile_options(course_registration_business_rules PRIVATE -Wall -Wextra)
     target_compile_options(teacher_and_administration_services PRIVATE -Wall -Wextra)
+    target_compile_options(login_service PRIVATE -Wall -Wextra)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -100,6 +106,46 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
     target_link_libraries(persistence_service PUBLIC stdc++fs)
 endif()
 
+# Zhang Yuhua：选退课溢出回归与持久化应用入口。
+add_executable(registration_credit_limit_tests
+    automated_tests/registration_credit_limit_tests.cpp)
+target_link_libraries(registration_credit_limit_tests
+    PRIVATE course_registration_business_rules)
+add_test(NAME registration_credit_limit COMMAND registration_credit_limit_tests)
+
+add_executable(registration_cross_module_acceptance
+    automated_tests/registration_cross_module_acceptance.cpp)
+target_link_libraries(registration_cross_module_acceptance
+    PRIVATE student_query_and_timetable_services)
+add_test(NAME registration_cross_module_acceptance
+    COMMAND registration_cross_module_acceptance)
+
+add_library(persistent_registration_service
+    source_code/persistent_registration_service.cpp)
+target_link_libraries(persistent_registration_service PUBLIC persistence_service)
+if(MSVC)
+    target_compile_options(persistent_registration_service PRIVATE /W4)
+else()
+    target_compile_options(persistent_registration_service PRIVATE -Wall -Wextra)
+endif()
+
+add_executable(registration_storage_integration_tests
+    automated_tests/registration_storage_integration_tests.cpp)
+target_link_libraries(registration_storage_integration_tests
+    PRIVATE persistent_registration_service persistent_administration_service
+            student_query_and_timetable_services)
+add_test(NAME registration_storage_integration
+    COMMAND registration_storage_integration_tests)
+
+add_executable(login_service_tests automated_tests/login_service_tests.cpp)
+target_link_libraries(login_service_tests
+    PRIVATE login_service persistent_registration_service)
+add_test(NAME login_service COMMAND login_service_tests)
+
+add_executable(registration_storage_demonstration
+    source_code/registration_storage_demonstration.cpp)
+target_link_libraries(registration_storage_demonstration
+    PRIVATE persistent_registration_service)
 # ---------------------------------------------------------------------------
 # [Zhu Ziliang 追加] 管理员修改的持久化入口（副本执行业务 -> 保存 -> 发布）。
 # 只新增目标，不改动上面的目标名称与依赖。
@@ -124,6 +170,34 @@ else()
     target_compile_options(persistent_administration_service PRIVATE -Wall -Wextra)
     target_compile_options(persistent_administration_tests PRIVATE -Wall -Wextra)
 endif()
+
+# 三端使用同一持久化状态的整体验收。
+add_executable(shared_persistence_acceptance_tests
+    automated_tests/shared_persistence_acceptance_tests.cpp)
+target_link_libraries(shared_persistence_acceptance_tests
+    PRIVATE persistent_registration_service persistent_administration_service)
+add_test(NAME shared_persistence_acceptance COMMAND shared_persistence_acceptance_tests)
+
+# Zhang Yikai：学生端会话接口（第 3 周：学生界面/接口接入共享存储）。
+add_library(student_interface
+    source_code/student_interface.cpp)
+target_link_libraries(student_interface
+    PUBLIC persistent_registration_service student_query_and_timetable_services)
+target_include_directories(student_interface PUBLIC header_files)
+if(MSVC)
+    target_compile_options(student_interface PRIVATE /W4)
+else()
+    target_compile_options(student_interface PRIVATE -Wall -Wextra)
+endif()
+
+add_executable(student_interface_demonstration
+    source_code/student_interface_demonstration.cpp)
+target_link_libraries(student_interface_demonstration PRIVATE student_interface)
+
+add_executable(student_interface_tests
+    automated_tests/student_interface_tests.cpp)
+target_link_libraries(student_interface_tests PRIVATE student_interface)
+add_test(NAME student_interface COMMAND student_interface_tests)
 
 # ---------------------------------------------------------------------------
 # [Zhu Ziliang 追加] 第 4 周（11/23-11/29）失败路径验收测试：
@@ -183,23 +257,6 @@ if (WIN32)
     target_link_libraries(http_teacher_admin_dev_server
         PRIVATE http_teacher_admin_routes ws2_32)
 
-    # 接入组长公共会话骨架（session.hpp）后的正式路由入口。
-    # 默认关闭：session.hpp 尚未进入仓库，打开前需要把它的目录加进 include。
-    option(COURSE_REGISTRATION_WITH_SESSION
-        "Build the team session adapter (requires Yuhua's session.hpp)" OFF)
-    if (COURSE_REGISTRATION_WITH_SESSION)
-        add_library(http_teacher_admin_session_routes
-            source_code/http_teacher_admin_session_routes.cpp)
-        target_link_libraries(http_teacher_admin_session_routes
-            PUBLIC http_teacher_admin_routes ws2_32)
-        target_include_directories(http_teacher_admin_session_routes
-            PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/session)
-        if (MSVC)
-            target_compile_options(http_teacher_admin_session_routes PRIVATE /W4)
-        else()
-            target_compile_options(http_teacher_admin_session_routes PRIVATE -Wall -Wextra)
-        endif()
-    endif()
 endif()
 
 if (MSVC)
@@ -352,6 +409,75 @@ if (COURSE_REGISTRATION_USE_SODIUM)
     course_registration_link_sodium(libsodium_probe)
     add_test(NAME libsodium_probe COMMAND libsodium_probe)
 
+    # Zhang Yuhua：真实密码校验和暂行的本机设置工具，复用已有 JSON 保存入口。
+    add_library(password_service source_code/password_service.cpp)
+    target_link_libraries(password_service PUBLIC login_service persistence_service
+                          PRIVATE sodium::sodium)
+    target_compile_options(password_service PRIVATE /W4)
+
+    add_executable(password_setup source_code/password_setup.cpp)
+    target_link_libraries(password_setup PRIVATE password_service)
+    target_compile_options(password_setup PRIVATE /W4)
+    course_registration_link_sodium(password_setup)
+    add_test(NAME password_setup_help COMMAND password_setup --help)
+
+    add_executable(password_service_tests automated_tests/password_service_tests.cpp)
+    target_link_libraries(password_service_tests
+        PRIVATE password_service persistent_registration_service)
+    course_registration_link_sodium(password_service_tests)
+    add_test(NAME password_service COMMAND password_service_tests)
+
     message(STATUS
         "libsodium: 官方动态包 x64/v143/dynamic（Debug/Release 文件齐全，链接检查通过）")
+endif()
+
+# 公共会话是独立阶段目标。打开它时必须同时启用真实密码库，不使用演示密码回退。
+option(COURSE_REGISTRATION_WITH_SESSION "Build shared HTTP authentication and session support" OFF)
+if (COURSE_REGISTRATION_WITH_SESSION)
+    if (NOT COURSE_REGISTRATION_USE_SODIUM)
+        message(FATAL_ERROR "公共会话需要 COURSE_REGISTRATION_USE_SODIUM=ON 和 SODIUM_ROOT。")
+    endif()
+    add_library(session_service source_code/session.cpp)
+    target_link_libraries(session_service PUBLIC password_service
+        persistent_administration_service persistent_registration_service ws2_32
+        PRIVATE sodium::sodium)
+    target_compile_features(session_service PUBLIC cxx_std_17)
+    target_include_directories(session_service SYSTEM PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/httplib
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/nlohmann)
+    target_compile_options(session_service PRIVATE /W4)
+
+    add_executable(session_auth_server source_code/session_auth_server.cpp)
+    target_link_libraries(session_auth_server PRIVATE session_service)
+    course_registration_link_sodium(session_auth_server)
+
+    add_executable(session_tests automated_tests/session_tests.cpp)
+    target_link_libraries(session_tests PRIVATE session_service)
+    course_registration_link_sodium(session_tests)
+    add_test(NAME session COMMAND session_tests)
+    set_tests_properties(session PROPERTIES TIMEOUT 45)
+
+    # 教师 / 管理员路由的正式适配器：身份与锁都来自 session_service，
+    # 不另建会话表；统一认证路由仍由 runtime.register_auth_routes() 注册。
+    add_library(http_teacher_admin_session_routes
+        source_code/http_teacher_admin_session_routes.cpp)
+    target_link_libraries(http_teacher_admin_session_routes
+        PUBLIC http_teacher_admin_routes session_service ws2_32)
+    target_compile_options(http_teacher_admin_session_routes PRIVATE /W4)
+
+    # 三端验证服务器：同一个进程、同一个 SessionRuntime、同一个 SystemContext。
+    add_executable(http_team4_web_server source_code/http_team4_web_server.cpp)
+    target_link_libraries(http_team4_web_server
+        PRIVATE http_teacher_admin_session_routes)
+    course_registration_link_sodium(http_team4_web_server)
+
+    # 正式会话 + 教师/管理员路由的端到端测试：真实本机 HTTP 连接，
+    # 覆盖 401/403/CSRF/成功落盘/业务拒绝/保存失败/改密流程。
+    add_executable(http_team4_integration_tests
+        automated_tests/http_team4_integration_tests.cpp)
+    target_link_libraries(http_team4_integration_tests
+        PRIVATE http_teacher_admin_session_routes session_service)
+    course_registration_link_sodium(http_team4_integration_tests)
+    add_test(NAME http_team4_integration COMMAND http_team4_integration_tests)
+    set_tests_properties(http_team4_integration PROPERTIES TIMEOUT 120)
 endif()

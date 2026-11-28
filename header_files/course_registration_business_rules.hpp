@@ -7,8 +7,8 @@
 namespace course_registration {
 
 // 账号比较的统一规则：去掉首尾空白，再转小写。
-// 维护入口、持久化保存/恢复校验与后续登录匹配都应使用它，避免
-// "带空格的账号" 在不同入口被当成不同账号。
+// 修改账号、检查文件数据和登录查找账号时都应使用这个函数。
+// 这样同一个账号即使多了首尾空格，或字母大小写不同，也会被识别为同一个账号。
 inline std::string normalize_account_key(const std::string& text) {
     size_t begin = 0;
     size_t end = text.size();
@@ -53,6 +53,8 @@ struct TeachingClass {
     std::vector<ClassMeeting> meetings;
 };
 
+// Active 表示学生当前仍在修读，计算人数、剩余名额和课表时会包含这条记录。
+// Dropped 表示已经退课，保留这条记录便于查看历史。学生重选同一个班时可改回 Active。
 enum class EnrollmentStatus { Active, Dropped };
 
 struct Enrollment {
@@ -61,12 +63,10 @@ struct Enrollment {
     EnrollmentStatus status;
 };
 
-// 目前用示例数据设置规则；之后再由管理员功能提供真实配置。
-// [Zhu Ziliang 追加，待 Zhang Yuhua 复核] 增加选课开始/结束时间（UC15 需要）。
-// 两个字段追加在末尾并带默认值，原来的 {true, 7} 形式初始化依然有效，
-// 也不会在 -Wall -Wextra 下产生 missing-field-initializers 警告。
-// 格式为 "YYYY-MM-DDTHH:MM"；空字符串表示该时间尚未设置，此时 registration_open
-// 仍由管理员手动开关决定，不引入新的必填字段。
+// 管理员配置的选退课规则，起止时间使用 "YYYY-MM-DDTHH:MM"。
+// 起止时间都已填写时，从 opens_at 开始允许操作，到 closes_at 时就停止允许操作。
+// 只要有一个时间没填写，就用 registration_open 这个手动开关判断是否开放。
+// 两个时间字段默认是空字符串，因此原来只写 {true, 7} 的代码仍然可以使用。
 struct RegistrationRule {
     bool registration_open;
     int maximum_credits;
@@ -97,7 +97,9 @@ enum class ResultCode {
     StorageParseError,      // 文件内容不是合法的 state 格式
     StorageSchemaMismatch,  // schema_version 不认识
     StorageIntegrityError,  // 引用缺失、编号重复等数据一致性问题
-    StorageBackupMissing    // 没有可恢复的 .bak 备份
+    StorageBackupMissing,   // 没有可恢复的 .bak 备份
+    // 公共会话检查使用这个结果，和“已登录但没有权限”区分开。
+    AuthenticationRequired
 };
 
 struct OperationResult {
@@ -105,50 +107,55 @@ struct OperationResult {
     std::string message;
 };
 
-// 第一周只实现内存中的选课业务规则，不负责登录、网页和数据库。
+// 本类保存内存中的课程、教学班、选课记录和规则，并按这些数据判断能否选课或退课。
+// 处理学生请求时，应调用 PersistentRegistrationService，让它先检查身份，再调用本类并保存文件。
+// 如果代码直接使用本类，就需要自行确认学生身份，并保证记录中用到的学生、课程和教学班都存在。
 class RegistrationService {
 public:
     RegistrationService(const std::vector<Course>& courses,
                         const std::vector<TeachingClass>& teaching_classes,
                         RegistrationRule rule);
 
+    // 依次检查是否开放、教学班是否存在、课程是否已选、时间是否冲突、学分是否超限和班级是否满员。
+    // 返回最先发现的错误。全部通过后，新增 Active 记录，或把同一个班的 Dropped 记录改回 Active。
     OperationResult enroll(int student_id, int teaching_class_id);
+    // 在选课开放期间，把这个学生在这个班的 Active 记录改为 Dropped。
+    // 如果已经退过课，或从未选过这个班，就返回 ActiveEnrollmentNotFound。
     OperationResult drop(int student_id, int teaching_class_id);
     int remaining_seats(int teaching_class_id) const;
     int enrollment_count(int teaching_class_id) const;
     std::vector<Enrollment> active_enrollments(int student_id) const;
 
-    // ---- [缺陷-001/003 修复，待 Zhang Yuhua 复核] 选课时段的统一判断入口 ----
-    // enroll() 和 drop() 都调用 registration_open_now()，不再只看保存下来的
-    // registration_open 布尔值，因此时间走过关闭时刻后会自动变为关闭。
-    // 判断规则（两个比较条件，不写数学式链式表达式）：
-    //   * 设置了 opens_at 与 closes_at 时：now >= opens_at 且 now < closes_at；
-    //   * 未设置起止时间时：沿用管理员的手动开关 registration_open。
-    // 手动 close_registration() 会清空起止时间，所以普通刷新不会把它重新打开。
+    // ---- [缺陷-001/003 修复，待 Zhang Yuhua 复核] 判断当前能否选课或退课 ----
+    // enroll() 和 drop() 都调用 registration_open_now()，按请求发生时的时间判断是否开放。
+    // 起止时间都已填写时，开始时刻允许操作，结束时刻起拒绝操作。
+    // 如果有一个时间没填写，就使用管理员设置的 registration_open 手动开关。
+    // 管理员手动关闭选课时会清空起止时间，因此下次检查时间也不会把选课重新打开。
     void set_fixed_now_for_tests(const std::string& iso_minute);
     bool registration_open_now() const;
-    // 同一个判断，用于显式给定时刻（例如测试或界面预览），逻辑只有这一处。
+    // 用传入的 moment 判断那个时间是否允许选退课，便于测试或预览。
+    // registration_open_now() 也使用这个方法，保证两种检查的规则相同。
     bool registration_open_at(const std::string& moment) const;
 
     // ---- [Zhu Ziliang 追加，待 Zhang Yuhua 复核] 教师/管理员模块只读接口 ----
-    // 目的：名单、人数、余量和管理员一致性检查都从同一份选课记录取值，
-    // 不另存计数，避免教师端与选课端显示不同人数。
+    // 教师查名单、学生查名额、管理员检查数据时，都读取这里保存的选课记录。
+    // 每次根据记录计算人数，避免各个模块分别保存人数后出现不同的结果。
     std::vector<Enrollment> all_enrollments() const;
     std::vector<Course> course_snapshot() const;
     std::vector<TeachingClass> teaching_class_snapshot() const;
     RegistrationRule registration_rule() const;
 
-    // ---- [Zhu Ziliang 追加，待 Zhang Yuhua 复核] 管理员校验通过后的受控写入 ----
-    // 只替换课程目录/教学班/规则，不改动 enrollments_；enroll() 的检查顺序不变。
-    // 调用方必须先经 AdministratorService 校验，不得直接调用。
+    // ---- [Zhu Ziliang 追加，待 Zhang Yuhua 复核] 保存管理员检查通过的修改 ----
+    // 管理员修改课程、教学班或规则前，先由 AdministratorService 检查修改是否合法。
+    // 检查通过后才调用下面的方法。这些方法替换相应数据，但保留已有选退课记录。
     void apply_catalog_change(const std::vector<Course>& courses,
                               const std::vector<TeachingClass>& teaching_classes);
     void apply_rule_change(const RegistrationRule& rule);
 
     // ---- [Zhang Yikai 追加，待 Zhang Yuhua 复核] 持久化恢复入口 ----
-    // 载入时直接恢复原始选课记录，不再走 enroll() 的业务检查：
-    // 这些记录在保存前已经校验过，重放会因时段/容量变化而失败。
-    // 只允许持久化层在 load/restore 时调用。
+    // 读取或恢复文件时，直接放回文件中的选课记录，由存储代码检查整份数据是否有效。
+    // 如果把历史记录逐条交给 enroll()，当前选课时间已关闭时，原本保存的记录也会被拒绝。
+    // 因此这个方法只给读取和恢复文件的代码使用。
     void restore_enrollments(std::vector<Enrollment> enrollments);
 
 private:
@@ -159,7 +166,7 @@ private:
     std::vector<TeachingClass> teaching_classes_;
     std::vector<Enrollment> enrollments_;
     RegistrationRule rule_;
-    // 空表示用本机当前时间；测试由 SystemContext 下发固定时间。
+    // 空字符串表示使用本机当前时间。测试可以通过 SystemContext 设置一个固定时间。
     std::string fixed_now_;
 };
 

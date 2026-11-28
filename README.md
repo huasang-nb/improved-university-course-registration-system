@@ -2,45 +2,31 @@
 
 ## 改进型大学选课系统 · Team 4
 
-本项目是 Team 4 的软件工程课程小组项目，面向学生、教师和管理员，提供课程查询、选课退课、个人课表、教学班查询及课程管理等功能。
+2026-11-19 持久化阶段整合候选版本。已整合三人的 C++17 业务模块、JSON 整库快照、选退课及管理员修改的持久化入口。最终浏览器页面、真实密码登录与会话、Web 并发协调仍待完成。
 
 当前为**三人阶段整合后的管理员模块加固版本**，状态更新于 **2026 年 11 月 29 日**。已接入三人的核心业务模块、控制台演示和六套自动化测试；管理员模块的持久化、凭据保留、失败路径验收与 libsodium 构建约束已完成。完整网页、登录认证仍未接入。
 
-## 团队分工
-
-| 成员 | 主要负责范围 |
-| --- | --- |
-| Zhang Yuhua（组长） | 选课、退课和核心业务规则，后续登录接入，以及代码整合与协调 |
-| Zhang Yikai | 课程搜索与详情、剩余名额查询、个人课表及对应测试 |
-| Zhu Ziliang | 教师查询、管理员维护、角色权限规则及共享数据接口 |
-
-具体改动及修复过程以 Git 提交记录为准，团队通过飞书记录进度、测试和缺陷。
-
-## 当前功能
-
-| 模块 | 已有业务能力 | 主要入口 |
+| 成员 | 本次成果 | 原始提交 |
 | --- | --- | --- |
-| 学生选课与退课 | 检查选课时段、同课程重复选课、上课时间冲突、学分上限和容量；退课释放名额，支持重新选课 | `RegistrationService::enroll` / `drop` |
-| 学生课程查询 | 按课程代码、名称或教师姓名搜索，按课程代码、学分、教师筛选，查看课程详情 | `StudentQueryService::search_courses` / `course_detail` |
-| 名额与课表 | 查询教学班容量、有效人数和剩余名额；根据有效选课记录生成本人课表 | `StudentQueryService::view_available_seats` / `view_timetable` |
-| 教师查询 | 查看本人教学班、选课人数与学生名单；管理员可以查看全部教学班 | `TeacherService::assigned_teaching_classes` / `class_summary` / `class_roster` |
-| 管理员维护 | 维护课程、教学班、容量、选课时段、学分上限和学生教师资料，检查部分数据一致性 | `AdministratorService` |
+| Zhang Yuhua | 选退课持久化、学生身份检查、选课学分溢出修复、验收与整合 | `18b44c1`，含 `bf689e8` 验收 |
+| Zhang Yikai | 课程查询、课表、共享 JSON 保存、恢复与完整性校验 | `88f8d99` 及此前查询提交 |
+| Zhu Ziliang | 管理员修复、课程与首班原子创建、管理员持久化入口、CMake 配置 | `fb41e2f`，含 `9d1c07c`、`d59c475` 及此前修复 |
 
-以上功能通过测试和演示程序调用，尚未构成可供真实用户使用的完整系统。已知问题及未完成项见下文。
+采用合并提交保留各人原始历史。第一周说明保存在 [历史 README](documentation/week1_integration_README_2026-11-06.md)，其中状态与测试数属于 11 月 6 日。
 
-## 共享数据与接口约定
+## 共享状态与入口
 
-`Course` 表示课程，`TeachingClass` 表示该课程的具体教学班。学生选择的是教学班，`Enrollment` 保存学生与教学班之间的选退课记录。
+三端共用一个 `SystemContext`。人数、余量和课表从 Active 记录派生，Dropped 历史保留。
 
-- 三个模块使用同一个 `SystemContext` 对象。课程、教学班、选课记录和规则由其中的 `RegistrationService` 持有，不另建可独立修改的数据源。
-- 教师名单和人数、学生余量及课表都依据有效（`Active`）选课记录计算。退课后的 `Dropped` 记录保留，但不计入当前人数和课表。
-- 剩余名额按 `capacity - active_enrollments` 计算，不另存一个需要同步的名额计数器。
-- 选课和退课会自行判断当前是否开放，不需要调用方先手动刷新时段。页面及其他模块读取实时状态时使用 `context.registration_window_open()`，不要将保存的 `registration_open` 字段当作实时状态。
-- 学生查询接口与教师 `class_summary()` 失败时清空输出，但调用方仍须先检查 `OperationResult::code`，仅在成功时展示结果。
-- 课程搜索同时指定教师姓名关键词与教师筛选时，教师匹配必须来自同一个教学班；课程代码或名称本身命中关键词时，再按教师筛选收窄教学班。
-- 登录尚未接入，`UserIdentity` 目前由测试与演示构造。后续请求入口须验证学生存在且账号启用，并使用登录身份对应的学生编号，防止替他人选退课。
+- 学生修改调用 `PersistentRegistrationService::enroll/drop`。
+- 管理员修改调用 `PersistentAdministratorService`；新课程使用 `create_course_with_teaching_class`。
+- 查询继续使用 `StudentQueryService`、`TeacherService` 读取同一上下文。
+- 修改请求先检查当前身份，在副本执行业务，保存成功后发布；失败不发布副本。
+- 身份必须由后续可信登录会话提供；演示中的 UserIdentity 不构成真实认证。
+- 保存与恢复使用 Kai 的 `initialize_storage/load_state/save_state/restore_state`，默认 `data/state.json`。
+- 登录账号跨角色查重，统一去首尾空白并转小写；没有增加内部数字 ID 跨角色唯一要求。
 
-接口资料见 [共享接口说明](documentation/interfaces.md)、[学生查询模块说明](documentation/student_query_module.md) 和 [接口变更说明](documentation/interface_change_request.md)。时段刷新文档中的早期方案已明确标记为废弃，当前选退课按请求时刻自行判断。
+## 构建与验收
 
 ## 项目结构
 
@@ -91,7 +77,8 @@ ctest --test-dir build\cmake -C Debug --output-on-failure
 ### 备选：g++ 脚本（业务逻辑部分）
 
 ```powershell
-.\build_and_test.ps1
+powershell -ExecutionPolicy Bypass -File .\run_registration_storage_acceptance.ps1
+powershell -ExecutionPolicy Bypass -File .\run_registration_storage_acceptance.ps1 -Configuration Release
 ```
 
 脚本会创建 `build` 目录，编译各测试与演示程序并运行可用的测试，全部通过时返回
@@ -113,19 +100,28 @@ ctest --test-dir build\cmake -C Debug --output-on-failure
 
 | 来源分支 | 本次接入版本 |
 | --- | --- |
-| `zhang-yuhua-registration-rules` | `88f0ccd` |
-| `feature/zhu-ziliang-teacher-admin` | `f5b1cdb`，含 006～010 的修复及补充测试 |
-| `feature/zhang-yikai-student-query` | `5940ee2` |
+| 原选课核心、学生查询、Kai 持久化 | Debug 均通过 |
+| 教师与管理员 | 483 checks，0 failures |
+| 选课学分溢出回归 | 10 checks 通过 |
+| 原跨模块选退课验收 | 574 checks，9 场景通过 |
+| 选退课存储验收 | 315 checks，7 场景通过 |
+| 管理员持久化 | 89 checks，0 failures |
+| 三端共享持久化 | 26 checks 通过 |
 
-2026 年 11 月 6 日，在组织仓库本地整合目录重新编译并运行三套现有测试，全部通过。其中教师管理员测试通过 326 项检查。实际整合版本的补充回归与联调通过 44 项检查，学分上限锁定通过 32 项检查，覆盖搜索组合、查询失败清空结果、选退课联动、容量和时段规则，以及无人或有人选课时改期仍不得解除学分上限锁定的场景。
+## 当前边界与待确认
 
-联调验证的主要流程为：管理员设置容量为 1，学生 A 选课成功，学生 B 因满员被拒绝；教师名单和人数、学生余量与课表保持一致；A 退课后名额恢复，名单和课表同步更新。
+启用官方动态 libsodium 后，现在可构建真实密码校验服务和本机 `password_setup` 工具。
+本机密码设置作为暂行方案，最终账号初始化和重置办法仍待讨论，后续可以更换。
+编译、使用步骤及失败处理见 [本机密码设置说明](documentation/local_password_setup.md)。
 
-此前登记的 001～010 已按复现步骤完成修复与复核，状态见下表。测试通过仅表示已有断言通过，不代表所有业务规则或输入场景都已覆盖。
+公共会话与本人改密实现见 [公共 HTTP 接入说明](documentation/session_integration.md)。
+打开 `COURSE_REGISTRATION_WITH_SESSION` 和 libsodium 后，可构建统一登录、当前身份、退出和本人改密 API，
+并使用 `run_session_acceptance.ps1` 验证。`session.hpp` 位于 `header_files`，命名空间为 `course_registration`。
+学生、教师、管理员页面和业务路由尚未在此分支完成共同接入，本轮没有合并其他成员分支。
 
-## 缺陷修复与复核
+原班教师停用后，管理员能否继续改该班时间和容量，用户于 11 月 19 日选择继续待讨论。候选版本保留当前允许行为及已有检查，不将其记录为已确认政策；新建班或改派给停用教师仍拒绝。内部数字 ID 跨角色唯一、课程归档/停用、管理员账号维护页面均未在此次整合中扩展。
 
-编号对应团队缺陷跟踪记录。以下状态属于本次整合版本，后续修复需在复测后更新。
+业务采用单进程共享状态。公共 HTTP 入口已提供共同加锁，组员路由仍须按说明接入同一运行对象，并完成三端浏览器流程及整合后的并发回归。本阶段不代表性能或断电耐久性验收。运行数据、临时快照、备份、exe 与 build 目录不进入提交。
 
 | 编号 | 问题 | 当前状态 |
 | --- | --- | --- |
