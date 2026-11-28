@@ -126,6 +126,22 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
+# [Zhu Ziliang 追加] 第 4 周（11/23-11/29）失败路径验收测试：
+# 容量调整、既有选课记录、重复账号、无效时段、越权访问。
+# 每个被拒操作同时断言返回码、可读消息，以及操作前后 SystemContext 快照一致。
+# ---------------------------------------------------------------------------
+add_executable(admin_failure_acceptance_tests
+    automated_tests/admin_failure_acceptance_tests.cpp)
+target_link_libraries(admin_failure_acceptance_tests
+    PRIVATE teacher_and_administration_services)
+add_test(NAME admin_failure_acceptance COMMAND admin_failure_acceptance_tests)
+if (MSVC)
+    target_compile_options(admin_failure_acceptance_tests PRIVATE /W4)
+else()
+    target_compile_options(admin_failure_acceptance_tests PRIVATE -Wall -Wextra)
+endif()
+
+# ---------------------------------------------------------------------------
 # [Zhu Ziliang 追加] 可选依赖：libsodium（Argon2id 密码哈希），默认关闭。
 # 本阶段只验收 **Windows x64 + MSVC 2022 + 官方动态包（dynamic）**：
 #   * 静态链接、Linux/GCC 都未验证，配置阶段直接拒绝；
