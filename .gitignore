@@ -17,3 +17,4 @@ __pycache__/
 /data/state.json
 /data/state.json.tmp
 /data/state.json.bak
+/data/*.password.lock
