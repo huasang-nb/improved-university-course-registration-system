@@ -211,6 +211,18 @@ add_executable(student_flow_demonstration
     source_code/student_flow_demonstration.cpp)
 target_link_libraries(student_flow_demonstration PRIVATE student_interface)
 
+# Zhang Yikai：学生端 HTTP 服务（cpp-httplib + JSON 接口 + 静态页面）。
+add_executable(course_registration_http_server
+    source_code/student_http_server.cpp)
+target_link_libraries(course_registration_http_server
+    PRIVATE persistent_registration_service student_query_and_timetable_services
+            login_service)
+target_include_directories(course_registration_http_server
+    PRIVATE third_party)
+if (WIN32)
+    target_link_libraries(course_registration_http_server PRIVATE ws2_32)
+endif()
+
 # ---------------------------------------------------------------------------
 # [Zhu Ziliang 追加] 可选依赖：libsodium（Argon2id 密码哈希），默认关闭。
 # 本阶段只验收 **Windows x64 + MSVC 2022 + 官方动态包（dynamic）**：

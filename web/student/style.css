@@ -1,0 +1,107 @@
+:root {
+  color-scheme: light;
+  font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+
+body {
+  margin: 0;
+  padding: 24px;
+  background: #f4f6fa;
+  color: #1f2937;
+}
+
+.hidden {
+  display: none;
+}
+
+.card {
+  max-width: 900px;
+  margin: 0 auto 16px;
+  padding: 16px 20px;
+  background: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+}
+
+h1, h2 {
+  margin: 0 0 12px;
+  font-size: 20px;
+}
+
+h2 {
+  font-size: 16px;
+}
+
+label {
+  display: block;
+  margin: 10px 0;
+}
+
+input {
+  margin-left: 8px;
+  padding: 6px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+#keyword {
+  flex: 1;
+  margin-left: 0;
+}
+
+button {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 6px;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+button:disabled {
+  background: #93c5fd;
+  cursor: default;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.list > * {
+  margin: 6px 0;
+}
+
+.title {
+  font-weight: 600;
+  margin-top: 12px;
+}
+
+.detail {
+  color: #374151;
+  font-size: 14px;
+}
+
+.empty {
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.error {
+  color: #b91c1c;
+  min-height: 20px;
+}
+
+.hint {
+  color: #6b7280;
+  font-size: 13px;
+}

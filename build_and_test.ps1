@@ -11,7 +11,7 @@ $gxx = if ($env:CXX) { $env:CXX } else { "g++" }
 $build = Join-Path $root "build"
 New-Item -ItemType Directory -Force -Path $build | Out-Null
 
-$common = @("-std=c++17", "-Wall", "-Wextra", "-Iheader_files")
+$common = @("-std=c++17", "-Wall", "-Wextra", "-Iheader_files", "-Ithird_party")
 
 $targets = @(
     @{
@@ -126,6 +126,17 @@ $targets = @(
                     "source_code/login_service.cpp",
                     "automated_tests/login_service_tests.cpp")
         Extra = @("-lstdc++fs")
+    },
+    @{
+        Name = "course_registration_http_server"
+        Sources = @("source_code/course_registration_business_rules.cpp",
+                    "source_code/teacher_and_administration_services.cpp",
+                    "source_code/student_query_and_timetable_services.cpp",
+                    "source_code/persistence_service.cpp",
+                    "source_code/persistent_registration_service.cpp",
+                    "source_code/login_service.cpp",
+                    "source_code/student_http_server.cpp")
+        Extra = @("-lstdc++fs", "-lws2_32")
     }
 )
 
@@ -172,6 +183,18 @@ $demoRegressionCode = $LASTEXITCODE
 $ErrorActionPreference = $previousErrorAction
 if ($demoRegressionCode -ne 0) {
     Write-Host "DEMO REGRESSION FAILED" -ForegroundColor Red
+    $failures++
+}
+
+# 学生端 HTTP 冒烟：启动服务、登录、查询、选课、退课、退出。
+Write-Host "`n=== run student http api smoke ===" -ForegroundColor Cyan
+$previousErrorAction = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'run_student_http_api.ps1')
+$httpSmokeCode = $LASTEXITCODE
+$ErrorActionPreference = $previousErrorAction
+if ($httpSmokeCode -ne 0) {
+    Write-Host "HTTP SMOKE FAILED" -ForegroundColor Red
     $failures++
 }
 
