@@ -95,6 +95,11 @@ int main(int argc, char** argv) {
     std::cout << "== 3. 选课（班 10） ==\n";
     const OperationResult enrolled = ui.enroll(10);
     std::cout << "   " << enrolled.message << "\n";
+    if (enrolled.code != ResultCode::Success) {
+        // 选课失败必须中止：不能继续执行后面的退课，否则会改掉原有记录。
+        std::cerr << "选课失败，演示中止；未执行后续退课。\n";
+        return 1;
+    }
 
     std::cout << "== 4. 我的课表 ==\n";
     std::vector<TimetableEntry> table;
@@ -115,15 +120,27 @@ int main(int argc, char** argv) {
 
     int active = 0;
     int dropped = 0;
-    ui.my_status(active, dropped);
+    const OperationResult status_before = ui.my_status(active, dropped);
+    if (status_before.code != ResultCode::Success) {
+        std::cerr << "个人状态读取失败：" << status_before.message << "\n";
+        return 1;
+    }
     std::cout << "== 5. 个人状态 ==\n   有效 " << active << " 门，已退 "
               << dropped << " 门\n";
 
     std::cout << "== 6. 退课（班 10） ==\n";
     const OperationResult drop_result = ui.drop(10);
     std::cout << "   " << drop_result.message << "\n";
+    if (drop_result.code != ResultCode::Success) {
+        std::cerr << "退课失败，演示以失败结束。\n";
+        return 1;
+    }
 
-    ui.my_status(active, dropped);
+    const OperationResult status_after = ui.my_status(active, dropped);
+    if (status_after.code != ResultCode::Success) {
+        std::cerr << "个人状态读取失败：" << status_after.message << "\n";
+        return 1;
+    }
     std::cout << "== 7. 退课后状态 ==\n   有效 " << active << " 门，已退 "
               << dropped << " 门\n";
     return 0;

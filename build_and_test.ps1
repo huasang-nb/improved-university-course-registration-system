@@ -163,6 +163,18 @@ foreach ($test in $tests) {
     }
 }
 
+# 控制台演示的退出码回归：选课失败不能继续退课、保存失败要返回非 0。
+Write-Host "`n=== run student flow demo regression ===" -ForegroundColor Cyan
+$previousErrorAction = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'run_student_flow_demo_regression.ps1')
+$demoRegressionCode = $LASTEXITCODE
+$ErrorActionPreference = $previousErrorAction
+if ($demoRegressionCode -ne 0) {
+    Write-Host "DEMO REGRESSION FAILED" -ForegroundColor Red
+    $failures++
+}
+
 Write-Host ""
 if ($failures -eq 0) {
     Write-Host "ALL BUILD AND TESTS PASSED" -ForegroundColor Green
