@@ -121,6 +121,17 @@ try {
     }
     Check ($csrfStatus -eq 403) "缺少 CSRF Token 的写请求返回 403（实际 $csrfStatus）"
 
+    # 未启用 libsodium 的构建没有 password_service，改密接口应明确返回 501。
+    $passwordStatus = 0
+    try {
+        Invoke-RestMethod "$base/api/auth/password" -Method Put -WebSession $session `
+            -Headers $headers -ContentType 'application/json' `
+            -Body '{"current_password":"Demo2026!","new_password":"NewDemo2026!"}' | Out-Null
+    } catch {
+        $passwordStatus = $_.Exception.Response.StatusCode.value__
+    }
+    Check ($passwordStatus -eq 501) "未启用 libsodium 时改密返回 501（实际 $passwordStatus）"
+
     $dropped = Invoke-RestMethod "$base/api/me/enrollments/10" -Method Delete `
         -WebSession $session -Headers $headers
     Check ($dropped.code -eq 'Success') '退课成功'

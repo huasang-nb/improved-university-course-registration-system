@@ -56,6 +56,7 @@ powershell -ExecutionPolicy Bypass -File .\build_and_test.ps1
 | POST | `/api/auth/login` | `{account_number, password}`；成功返回 `user` 与 `csrf_token`，并下发 `team4_session` Cookie |
 | GET | `/api/auth/me` | 当前学生与 `csrf_token` |
 | POST | `/api/auth/logout` | 需要 `X-CSRF-Token`；删除会话并清除 Cookie |
+| PUT | `/api/auth/password` | `{current_password, new_password}`；需要 CSRF；按会话账号改密 |
 | GET | `/api/courses?keyword=&course_code=&credits=&teacher_id=` | 课程搜索（空结果返回 `[]`） |
 | GET | `/api/courses/{id}` | 课程详情（含教学班） |
 | GET | `/api/classes/{id}/seats` | 教学班容量、人数、余量 |
@@ -79,6 +80,11 @@ powershell -ExecutionPolicy Bypass -File .\build_and_test.ps1
 写操作（选课、退课、退出）必须带 `X-CSRF-Token`；浏览器页面从
 `/api/auth/me` 取到后放在请求头里。
 
+`PUT /api/auth/password` 复用 `password_service`：服务器按会话确定账号，
+校验当前密码后写入新的 Argon2id 哈希并保存；不接受前端指定其他账号。
+该接口需要 libsodium 构建，未启用时返回 501；当前密码错误返回 403。
+新密码规则由密码服务统一（目前只检查非空与长度上限）。
+
 ## 并发与数据
 
 - 进程内用一把 `std::mutex` 保护 `SystemContext` 的读写；
@@ -90,6 +96,7 @@ powershell -ExecutionPolicy Bypass -File .\build_and_test.ps1
 
 - 页面加载先请求 `/api/auth/me`；未登录显示登录表单；
 - 搜索、课表、我的选课都有空状态提示；
+- 已登录页面提供“修改密码”表单，调用 `PUT /api/auth/password`，成功后清空输入；
 - 选课/退课成功后重新查询余量、课表和状态；
 - 使用 `textContent` 显示课程名与错误信息，避免把返回文本当 HTML。
 

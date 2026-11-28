@@ -209,10 +209,39 @@ async function logout() {
   clearMessage();
 }
 
+async function changePassword() {
+  $('password-message').textContent = '';
+  const currentPassword = $('current-password').value;
+  const newPassword = $('new-password').value;
+  if (!currentPassword || !newPassword) {
+    $('password-message').textContent = '请输入当前密码和新密码。';
+    return;
+  }
+  try {
+    await request('/api/auth/password', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': csrfToken,
+      },
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword,
+      }),
+    });
+    $('password-message').textContent = '密码修改成功。';
+    $('current-password').value = '';
+    $('new-password').value = '';
+  } catch (error) {
+    $('password-message').textContent = '修改失败：' + error.message;
+  }
+}
+
 $('login-button').addEventListener('click', login);
 $('logout-button').addEventListener('click', logout);
 $('search-button').addEventListener('click', search);
 $('refresh-button').addEventListener('click', refreshAll);
+$('change-password-button').addEventListener('click', changePassword);
 $('keyword').addEventListener('keydown', (event) => {
   if (event.key === 'Enter') {
     search();

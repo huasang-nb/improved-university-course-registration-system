@@ -388,6 +388,12 @@ if (COURSE_REGISTRATION_USE_SODIUM)
     course_registration_link_sodium(password_service_tests)
     add_test(NAME password_service COMMAND password_service_tests)
 
+    # 学生 HTTP 服务复用密码服务做本人改密（PUT /api/auth/password）。
+    if (TARGET course_registration_http_server)
+        target_link_libraries(course_registration_http_server
+            PRIVATE password_service)
+    endif()
+
     message(STATUS
         "libsodium: 官方动态包 x64/v143/dynamic（Debug/Release 文件齐全，链接检查通过）")
 endif()

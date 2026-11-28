@@ -28,6 +28,7 @@
 #include <vector>
 
 #ifdef COURSE_REGISTRATION_USE_SODIUM
+#include "password_service.hpp"
 #include <sodium.h>
 #endif
 
@@ -775,6 +776,55 @@ private:
                              "SameSite=Lax");
                          send_ok(response, "signed out", "null");
                      });
+
+        server_.Put("/api/auth/password",
+                    [this](const httplib::Request& request,
+                           httplib::Response& response) {
+                        Session session;
+                        if (!require_student(request, response, session, true)) {
+                            return;
+                        }
+                        std::map<std::string, JsonValue> body;
+                        std::string current_password;
+                        std::string new_password;
+                        if (!JsonReader(request.body).parse_object(body) ||
+                            !get_string(body, "current_password",
+                                        current_password) ||
+                            !get_string(body, "new_password", new_password) ||
+                            current_password.empty() || new_password.empty()) {
+                            send_error(response, 400, "InvalidInput",
+                                       "current_password and new_password are required");
+                            return;
+                        }
+#ifdef COURSE_REGISTRATION_USE_SODIUM
+                        OperationResult result;
+                        {
+                            std::lock_guard<std::mutex> lock(context_mutex_);
+                            const Student* student =
+                                context_.find_student(session.identity.user_id);
+                            if (student == nullptr ||
+                                !verify_password_hash(student->password_hash,
+                                                      current_password)) {
+                                send_error(response, 403, "PermissionDenied",
+                                           "current password is incorrect");
+                                return;
+                            }
+                            // 服务只按会话账号改密，不接受前端指定其他账号。
+                            result = set_account_password(
+                                context_, options_,
+                                session.identity.account_number, new_password,
+                                true);
+                        }
+                        if (result.code != ResultCode::Success) {
+                            send_result_error(response, result);
+                            return;
+                        }
+                        send_ok(response, result.message, "null");
+#else
+                        send_error(response, 501, "PasswordChangeUnavailable",
+                                   "password change requires the libsodium build");
+#endif
+                    });
 
         server_.Get("/api/courses",
                     [this](const httplib::Request& request,
