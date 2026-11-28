@@ -201,6 +201,37 @@
       : '<span class="badge off">停用</span>';
   }
 
+  // 密码规则（2026-11-28 与组长对齐；服务器会再次校验同一套规则）：
+  //   至少 8 位；只允许英文字母、数字和英文半角符号；
+  //   不允许中文、中文标点、空格、制表符、换行等字符；
+  //   必须同时包含至少一个大写字母、一个小写字母和一个数字；
+  //   不自动删除首尾空格，发现不允许的字符就明确报错。
+  const PASSWORD_SYMBOLS = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
+
+  function passwordRuleError(password) {
+    if (password.length < 8) {
+      return "新密码至少 8 位";
+    }
+    let hasUpper = false;
+    let hasLower = false;
+    let hasDigit = false;
+    for (const ch of password) {
+      if (/[A-Z]/.test(ch)) {
+        hasUpper = true;
+      } else if (/[a-z]/.test(ch)) {
+        hasLower = true;
+      } else if (/[0-9]/.test(ch)) {
+        hasDigit = true;
+      } else if (!PASSWORD_SYMBOLS.includes(ch)) {
+        return "新密码只能使用英文字母、数字和英文半角符号，且不能包含空格或中文";
+      }
+    }
+    if (!hasUpper || !hasLower || !hasDigit) {
+      return "新密码必须同时包含大写字母、小写字母和数字";
+    }
+    return null;
+  }
+
   // “修改我的密码”：与登录同一套公共接口（由组长骨架提供）。
   // 契约：PUT /api/auth/password {current_password, new_password}，
   // 成功 200；当前密码错误 400 InvalidInput；未登录/会话失效 401。
@@ -216,7 +247,8 @@
       '<label class="field">新密码<input id="pw-new" type="password" autocomplete="new-password"></label>' +
       '<label class="field">确认新密码<input id="pw-confirm" type="password" autocomplete="new-password"></label>' +
       "</div>" +
-      '<p class="hint">新密码至少 8 位；服务器校验当前密码后保存新哈希。</p>' +
+      '<p class="hint">新密码至少 8 位，且必须同时包含大写字母、小写字母和数字；'
+      '只能使用英文字母、数字和英文半角符号，不能包含空格或中文。服务器会再次校验。</p>' +
       '<div class="form-actions">' +
       '<button type="button" class="secondary" data-act="cancel">取消</button>' +
       '<button type="button" data-act="submit">保存</button>' +
@@ -246,8 +278,9 @@
         toast("两次输入的新密码不一致", true);
         return;
       }
-      if (next.length < 8) {
-        toast("新密码至少 8 位", true);
+      const ruleError = passwordRuleError(next);
+      if (ruleError) {
+        toast(ruleError, true);
         return;
       }
       try {
@@ -258,7 +291,7 @@
         close();
         // 改密成功后服务端会撤销该账号的全部旧会话（含当前这一个），
         // 所以这里不做“原地继续使用”，回到登录页重新认证。
-        toast("密码已修改，请用新密码重新登录");
+        toast("密码修改成功，请重新登录");
         setTimeout(() => window.location.reload(), 1200);
       } catch (error) {
         if (

@@ -88,10 +88,21 @@ void register_teacher_admin_routes_with_session(httplib::Server& server) {
             });
 
         if (locked.code != ResultCode::Success) {
-            // 复核失败：停用/删除/不匹配 → 401，角色不符 → 403。
-            const ResultSource source = locked.code == ResultCode::PermissionDenied
-                                            ? ResultSource::Permission
-                                            : ResultSource::Session;
+            // 复核失败不一律当 401（2026-11-28 对齐）：
+            //   角色不符            -> 403 PermissionDenied
+            //   存储/内部异常        -> 500（InternalError 或原 Storage* 码）
+            // 会话本身在进入临界区前已由 require_session() 检查过；若锁内发现身份失效，
+            // 由公共层给出可区分的错误码后再补一支 401，这里不猜测。
+            ResultSource source = ResultSource::Internal;
+            if (locked.code == ResultCode::PermissionDenied) {
+                source = ResultSource::Permission;
+            } else if (locked.code == ResultCode::StorageIoError ||
+                       locked.code == ResultCode::StorageParseError ||
+                       locked.code == ResultCode::StorageSchemaMismatch ||
+                       locked.code == ResultCode::StorageIntegrityError ||
+                       locked.code == ResultCode::StorageBackupMissing) {
+                source = ResultSource::Business;  // 保留实际 Storage* 错误码
+            }
             write_result(out, locked, source);
             return;
         }

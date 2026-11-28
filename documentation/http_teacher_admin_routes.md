@@ -69,7 +69,7 @@
 |---|---|
 | 头文件与命名空间 | `session.hpp`，类型与函数放在 `course_registration` 命名空间 |
 | `with_business_lock()` 回调返回类型 | 返回 `void`，业务响应用捕获变量带出；它返回的 `OperationResult` 只表示加锁后的身份 / 角色检查，不替代回调里的业务结果（满班仍是 409） |
-| 持锁后的失败映射 | 停用 / 删除 / 账号不匹配 → 401 `AuthenticationRequired`；角色不符 → 403 `PermissionDenied`；业务冲突保持 409；内部异常 500 |
+| 持锁后的失败映射 | 停用 / 删除 / 账号不匹配 → 401 `AuthenticationRequired`；角色不符 → 403 `PermissionDenied`；业务冲突保持 409；保存失败 500 保留实际 `Storage*`；其他内部异常 500 `InternalError`（`ResultSource::Internal`） |
 | `require_session()` 的续期 | 只有通过检查的 API 请求才刷新空闲时间；静态页面与图片不续期；最长 8 小时从登录成功起算、不延长 |
 | `require_csrf()` | GET / HEAD / OPTIONS 直接通过；写操作（含退出登录、改密）必查；登录接口单独处理 |
 | `context_snapshot()` | 保留给锁外只读；锁内改用新增的 `LockedServices::context()` 直接读取，离开回调前把要保留的数据复制走，响应不含密码哈希 |
@@ -77,6 +77,8 @@
 
 对应的接入代码在 `source_code/http_teacher_admin_session_routes.cpp`（`COURSE_REGISTRATION_WITH_SESSION=ON`
 时编译），调用链是 `require_session()` → `require_csrf()` → `with_business_lock()` → `dispatch()`。
+
+接入注意：`with_business_lock()` 失败时不能一律当 401。本模块按 `PermissionDenied` → 403、`Storage*` → 500 保留原码、其余 → `ResultSource::Internal`（500 `InternalError`）处理；若锁内识别到身份失效，请在返回值里给出可区分的结果，我再补 401 分支。`PUT /api/auth/password` 只由公共 HTTP 服务注册，本模块注册 `/api/auth/*` 会重复，自测里已断言这里返回 404。
 
 密码相关的公共服务（Argon2id 生成、校验、本人改密）由**张宇华**负责；本模块只在页面提供入口，
 `PUT /api/auth/password` 的会话撤销与会话语义也以公共实现为准。

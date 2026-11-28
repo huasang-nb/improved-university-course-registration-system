@@ -175,6 +175,13 @@ void test_authentication_and_roles() {
     EXPECT_STATUS(fixture.get("/api/admin/does-not-exist", kAdmin), 404, "RecordNotFound");
     EXPECT_STATUS(fixture.write("POST", "/api/teacher/classes", json::object(), kWang), 404,
                   "RecordNotFound");
+    // 改密接口由公共 HTTP 服务统一注册（2026-11-28 对齐），本模块不能也注册一份：
+    // 即使带着有效管理员身份，/api/auth/* 在这里也必须是 404。
+    EXPECT_STATUS(fixture.write("PUT", "/api/auth/password",
+                                {{"current_password", "OldPass123"},
+                                 {"new_password", "NewPass456"}},
+                                kAdmin),
+                  404, "RecordNotFound");
     // 路径编号必须是正整数：0 由正则放过，交给 parse_path_id 拒绝。
     EXPECT_STATUS(fixture.get("/api/teacher/classes/0/summary", kWang), 400, "InvalidInput");
     EXPECT_STATUS(fixture.get("/api/teacher/classes/99999999999/summary", kWang), 400,
