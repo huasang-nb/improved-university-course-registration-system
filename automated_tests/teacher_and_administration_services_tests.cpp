@@ -646,16 +646,27 @@ void test_defect_002_course_change_blocked_while_enrolled() {
     CHECK(stored.meetings.size() == 1);
     CHECK(stored.meetings[0].start_minute == 900);
 
-    // 学生退课之后可以改课程，但前提是原课程还留着别的教学班（URS 6.7）。
+    // 学生退课之后仍然不能改课程：Dropped 记录同样是历史，改归属等于改写历史
+    // （见第 4 周失败验收测试 test_existing_enrollments）。
     CHECK_CODE(fixture.context.registration().drop(1001, 30),
                ResultCode::Success);
+    const OperationResult history_blocked =
+        administration.update_teaching_class(fixture.admin, to_course_one);
+    CHECK_CODE(history_blocked, ResultCode::InvalidInput);
+    CHECK_MESSAGE(history_blocked, "dropped enrollment record");
+    CHECK(fixture.context.find_teaching_class(30, stored));
+    CHECK(stored.course_id == 3);
+
+    // 一条记录都没有的教学班仍然可以改课程，前提是原课程还留着别的班（URS 6.7）。
     CHECK_CODE(administration.create_teaching_class(
                    fixture.admin, make_class(31, 3, 300, 2, 4, 600, 660, "C302")),
                ResultCode::Success);
-    CHECK_CODE(
-        administration.update_teaching_class(fixture.admin, to_course_one),
-        ResultCode::Success);
-    CHECK(fixture.context.find_teaching_class(30, stored));
+    const TeachingClass move_without_records =
+        make_class(31, 1, 300, 2, 4, 600, 660, "C302");
+    CHECK_CODE(administration.update_teaching_class(fixture.admin,
+                                                    move_without_records),
+               ResultCode::Success);
+    CHECK(fixture.context.find_teaching_class(31, stored));
     CHECK(stored.course_id == 1);
 }
 

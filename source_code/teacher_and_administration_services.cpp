@@ -1,4 +1,4 @@
-// 教师与管理员模块实现（Zhu Ziliang）
+﻿// 教师与管理员模块实现（Zhu Ziliang）
 //
 // 规则：任何人调用本模块都会先校验角色；校验失败的请求不改动任何数据。
 // 名单、人数与余量一律由 RegistrationService 中的有效选课记录现算。
@@ -89,16 +89,6 @@ bool is_blank(const std::string& text) {
         }
     }
     return true;
-}
-
-std::string to_lower(const std::string& text) {
-    std::string result;
-    result.reserve(text.size());
-    for (char character : text) {
-        result.push_back(static_cast<char>(
-            std::tolower(static_cast<unsigned char>(character))));
-    }
-    return result;
 }
 
 const char* role_name(Role role) {
@@ -706,7 +696,11 @@ OperationResult AdministratorService::create_course_with_teaching_class(
                     "course_id " + std::to_string(course.course_id) +
                         " already exists"};
         }
-        if (to_lower(existing.course_code) == to_lower(course.course_code)) {
+        // 课程代码与账号用同一条比较规则（去首尾空白再小写）：
+        // 否则 " SE101 " 可以绕过 "SE101" 的唯一性检查，课程目录里出现两个
+        // 看起来一样的代码，后续选课与查询无法区分。
+        if (normalize_account_key(existing.course_code) ==
+            normalize_account_key(course.course_code)) {
             return {ResultCode::DuplicateIdentifier,
                     "course_code " + course.course_code + " already exists"};
         }
@@ -797,7 +791,8 @@ OperationResult AdministratorService::update_course(const UserIdentity& user,
     }
     for (const Course& other : context_.courses()) {
         if (other.course_id != course.course_id &&
-            to_lower(other.course_code) == to_lower(course.course_code)) {
+            normalize_account_key(other.course_code) ==
+                normalize_account_key(course.course_code)) {
             return {ResultCode::DuplicateIdentifier,
                     "course_code " + course.course_code +
                         " is used by course_id " +
@@ -1041,6 +1036,31 @@ OperationResult AdministratorService::update_teaching_class(
                     std::to_string(teaching_class.course_id) + " while it has " +
                     std::to_string(active) +
                     " active enrollment(s); ask the students to drop first"};
+    }
+
+    // Dropped 记录同样是历史：把教学班改到别的课程，这些历史选课就会显示成
+    // 另一门课（课程名、学分都变了），等于改写历史。处置与
+    // remove_teaching_class()/remove_course() 保持一致：拒绝，需要换课时
+    // 新建教学班，而不是改旧班的归属。
+    if (teaching_class.course_id != existing.course_id) {
+        int dropped = 0;
+        for (const Enrollment& enrollment : context_.all_enrollments()) {
+            if (enrollment.teaching_class_id == existing.teaching_class_id &&
+                enrollment.status == EnrollmentStatus::Dropped) {
+                ++dropped;
+            }
+        }
+        if (dropped > 0) {
+            return {ResultCode::InvalidInput,
+                    "course_id of teaching class " +
+                        std::to_string(existing.teaching_class_id) +
+                        " cannot be changed from " +
+                        std::to_string(existing.course_id) + " to " +
+                        std::to_string(teaching_class.course_id) + " while it has " +
+                        std::to_string(dropped) +
+                        " dropped enrollment record(s) kept as history; create a "
+                        "new teaching class instead"};
+        }
     }
 
     // URS 6.7：每门 Course 至少保留一个 TeachingClass。把某门课程最后一个教学班
