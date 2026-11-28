@@ -16,7 +16,7 @@
 | 构建 | 首选 `g++` 直接编译（`build_and_test.ps1`）；同时保留 `CMakeLists.txt` | 部分组员未安装 CMake，直接 g++ 可保证人人能编译 |
 | 编码风格 | `snake_case` 类型/文件、`camelCase` 方法、命名空间 `course_registration` | 沿用 Yuhua 起步代码，避免重命名造成冲突 |
 | 数据存储 | 阶段一：内存（示例数据初始化）。阶段二：单一存储对象 + 文件/SQLite 持久化 | **唯一事实来源**：课程目录、教学班、选课记录、选课规则都由 `RegistrationService` 持有；其他模块只通过接口读写 |
-| Web 方案 | 阶段三：单头文件 `cpp-httplib` 提供 HTTP/JSON 接口，静态 HTML 页面调用 | 避免引入框架与包管理器；`cpp-httplib` 为单头文件，可直接放进 `third_party/`。**待三人确认** |
+| Web 方案 | 阶段三：单头文件 `cpp-httplib` 提供 HTTP/JSON 接口，静态 HTML 页面调用 | 避免引入框架与包管理器；`cpp-httplib` 为单头文件，可直接放进 `third_party/`。**已采用 cpp-httplib v0.67.0 + nlohmann/json v3.11.3**（见 `third_party/README.md`、`documentation/http_teacher_admin.md`） |
 | 时间表示 | 上课时间 `day_of_week` 取 1–7（周一 = 1），`start_minute`/`end_minute` 为当天 0 点起的分钟数 | 与 Yuhua 现有 `ClassMeeting` 一致 |
 | 时间戳表示 | 字符串 `"YYYY-MM-DDTHH:MM"`，固定宽度可直接比较先后 | 用于选课时段；避免引入 `chrono` 时区问题 |
 
@@ -203,7 +203,7 @@ cd build\cmake; ctest -C Release --output-on-failure
 ## 六、仍需三人确认的问题
 
 1. 存储方案：文件（JSON/CSV）还是 SQLite？谁在哪个分支上先落地？
-2. Web 方案：`cpp-httplib` + 静态页面是否接受？接口路径与 JSON 字段命名是否按本文件第三节。
+2. Web 方案：`cpp-httplib` + 静态页面已采用；教师/管理员路由见 `documentation/http_teacher_admin_routes.md`，登录侧路径按 `documentation/decisions/0001-http-contract.md` 第 21 条。
 3. 学分上限的默认值与是否允许管理员修改（URS 未给出数字，不能写成甲方要求）。
 4. 登录失败提示是否可以区分"账号不存在"和"密码错误"（涉及安全与 URS 的具体措辞）。
 5. 教学班删除策略：当前"仍有选课记录（含已退课历史）即拒绝"，是否需要归档/软删除。
